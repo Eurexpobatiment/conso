@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consommations Halls</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b3d6b">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f3f2ef;color:#222;
+       display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .box{text-align:center;max-width:420px;padding:24px}
+  .spin{width:28px;height:28px;border:3px solid #ccd;border-top-color:#0b3d6b;border-radius:50%;
+        animation:s 1s linear infinite;margin:0 auto 12px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  input{width:100%;box-sizing:border-box;padding:10px;font-size:15px;margin:10px 0}
+  button{padding:10px 18px;font-size:15px;background:#0b3d6b;color:#fff;border:0;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="box" id="msg"><div class="spin"></div>Chargement…</div>
+
+<script>
+/* ===== Réglage : URL /exec du NOUVEAU déploiement Apps Script (celui avec Api.gs) ===== */
+var API_URL = 'https://script.google.com/macros/s/AKfycby2L49T5N9wyJn6kAJbGbBUhFu1EuMIw35mn-OFkBz1-ebMLq7XmT_xLIafBbJ4xelv/exec';
+
+/* Fonctions en lecture seule (pas de clé demandée, réponse gardée pour le hors-ligne) */
+var LECTURE = ['getBootstrap','getReleves','getEauSynthese','exportResumeCsv','pvMois','chEtatCharte','etatMajQuotidienne'];
+/* Fonctions mises en file d'attente si pas de réseau (clé = arguments identifiant la saisie) */
+var FILE_ATTENTE = { saveReleve: 2, saveMeteoJour: 1 };
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+
+/* ---------- Remplaçant de google.script.run, injecté dans Index.html ---------- */
+function shim(cfg) {
+  var LS = window.localStorage;
+  function lsGet(k){ try { return JSON.parse(LS.getItem(k)); } catch(e){ return null; } }
+  function lsSet(k,v){ try { LS.setItem(k, JSON.stringify(v)); } catch(e){} }
+
+  function cle() {
+    var k = LS.getItem('pwa_cle');
+    if (!k) {
+      k = window.prompt('Clé d’écriture de l’appli (fournie par pwaCreerCle dans Apps Script) :') || '';
+      k = k.trim();
+      if (k) LS.setItem('pwa_cle', k);
+    }
+    return k;
+  }
+
+  function post(body) {
+    return fetch(cfg.api, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // évite la pré-requête CORS
+      body: JSON.stringify(body),
+      redirect: 'follow'
+    }).then(function (r) {
+      if (!r.ok) throw new Error('Erreur serveur (HTTP ' + r.status + ')');
+      return r.json();
+    }).then(function (j) {
+      if (!j.ok) {
+        if (/Clé PWA/.test(j.error)) LS.removeItem('pwa_cle');
+        var e = new Error(j.error); e.serveur = true; throw e;
+      }
+      return j.data;
+    });
+  }
+
+  function horsLigne(e) { return !navigator.onLine || (e && !e.serveur && e.name === 'TypeError'); }
+
+  /* File d'attente des saisies faites sans réseau */
+  function fileLire(){ return lsGet('pwa_file') || {}; }
+  function fileMettre(fn, args) {
+    var f = fileLire();
+    f[fn + '|' + JSON.stringify(args.slice(0, cfg.file[fn]))] = { fn: fn, args: args, t: Date.now() };
+    lsSet('pwa_file', f);
+  }
+  var envoiEnCours = false;
+  function fileEnvoyer() {
+    var f = fileLire(), cles = Object.keys(f);
+    if (!cles.length || envoiEnCours || !navigator.onLine) return;
+    envoiEnCours = true;
+    var n = 0;
+    cles.sort(function(a,b){ return f[a].t - f[b].t; });
+    cles.reduce(function (p, k) {
+      return p.then(function () {
+        return post({ fn: f[k].fn, args: f[k].args, cle: cle() }).then(function () {
+          var g = fileLire(); if (g[k] && g[k].t === f[k].t) delete g[k]; lsSet('pwa_file', g); n++;
+        });
+      });
+    }, Promise.resolve()).catch(function(){}).then(function () {
+      envoiEnCours = false;
+      if (n && typeof window.toast === 'function')
+        window.toast(n + ' saisie(s) hors ligne envoyée(s). Rechargez pour voir les calculs à jour.');
+    });
+  }
+  window.addEventListener('online', fileEnvoyer);
+  setTimeout(fileEnvoyer, 1500);
+
+  function appel(fn, args) {
+    var lecture = cfg.lecture.indexOf(fn) >= 0;
+    var body = { fn: fn, args: args };
+    if (!lecture) body.cle = cle();
+    var kc = 'pwa_c_' + fn + JSON.stringify(args);
+    return post(body).then(function (d) {
+      if (lecture) lsSet(kc, d);
+      return d;
+    }, function (e) {
+      if (horsLigne(e)) {
+        if (lecture) {
+          var c = lsGet(kc);
+          if (c !== null) {
+            setTimeout(function(){ if (typeof window.toast === 'function') window.toast('Hors ligne : dernières données connues affichées'); }, 300);
+            return c;
+          }
+          throw new Error('Hors ligne et aucune donnée en mémoire.');
+        }
+        if (cfg.file[fn] != null) {
+          fileMettre(fn, args);
+          throw new Error('Hors ligne : saisie gardée sur le téléphone, envoi automatique au retour du réseau.');
+        }
+        throw new Error('Hors ligne : action impossible sans réseau.');
+      }
+      throw e;
+    });
+  }
+
+  function runner(ok, ko) {
+    return new Proxy({}, { get: function (_, p) {
+      if (p === 'withSuccessHandler') return function (h) { return runner(h, ko); };
+      if (p === 'withFailureHandler') return function (h) { return runner(ok, h); };
+      if (p === 'withUserObject') return function () { return runner(ok, ko); };
+      return function () {
+        appel(p, [].slice.call(arguments)).then(
+          function (d) { if (ok) ok(d); },
+          function (e) { if (ko) ko(e); else console.error(e); });
+      };
+    }});
+  }
+  window.google = { script: {
+    run: runner(null, null),
+    host: { close: function(){}, setHeight: function(){}, setWidth: function(){}, editor: {} }
+  }};
+}
+
+/* ---------- Chargement de l'interface (Index.html servi par Apps Script) ---------- */
+var cfg = { api: API_URL, lecture: LECTURE, file: FILE_ATTENTE };
+
+function afficher(html) {
+  var tete = '<link rel="manifest" href="manifest.webmanifest">'
+    + '<meta name="theme-color" content="#0b3d6b">'
+    + '<link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">'
+    + '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">'
+    + '<script>(' + shim.toString() + ')(' + JSON.stringify(cfg) + ');<\/script>';
+  html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, function (m) { return m + tete; }) : tete + html;
+  if (!/<title>Consommations/i.test(html)) html = html.replace(/<\/head>/i, '<title>Consommations Halls</title></head>');
+  document.open(); document.write(html); document.close();
+}
+
+function erreur(t) { document.getElementById('msg').innerHTML = t; }
+
+if (!/^https:/.test(API_URL)) {
+  erreur('Réglage manquant : renseignez <b>API_URL</b> dans index.html avec l’URL /exec du déploiement Apps Script.');
+} else {
+  fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                   body: JSON.stringify({ fn: '__html' }), redirect: 'follow' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) throw new Error(j.error);
+      try { localStorage.setItem('pwa_html', j.data); } catch (e) {}
+      afficher(j.data);
+    })
+    .catch(function (e) {
+      var h = null; try { h = localStorage.getItem('pwa_html'); } catch (x) {}
+      if (h) afficher(h);
+      else erreur('Impossible de charger l’appli (' + (e && e.message || e) + ').<br><br><button onclick="location.reload()">Réessayer</button>');
+    });
+}
+</script>
+</body>
+</html>
