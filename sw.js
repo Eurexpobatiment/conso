@@ -1,6 +1,6 @@
 /* Service worker : met en cache l'enveloppe de la PWA pour qu'elle s'ouvre sans réseau.
    Les données (appels Apps Script) ne passent pas par ici : elles sont gérées dans index.html. */
-var CACHE = 'conso-halls-v2';
+var CACHE = 'conso-halls-v3';
 var FICHIERS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -19,7 +19,8 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   e.respondWith(
-    fetch(req).then(function (r) {
+    // no-cache : redemande toujours la dernière version (sinon le navigateur peut garder l'ancienne 10 min)
+    fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (r) {
       var copie = r.clone();
       caches.open(CACHE).then(function (c) { c.put(req, copie); });
       return r;
