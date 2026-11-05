@@ -198,27 +198,26 @@ function afficher(html) {
   /* Saisie : rouvrir sur le dernier salon saisi (mémorisé sur l'appareil) */
   var patchSaisie = '<script>(' + function () {
     var KEY = 'conso.dernierSalonSaisi';
-    function appliquer() {
-      try {
-        var id = localStorage.getItem(KEY), sel = document.getElementById('sSalon');
-        if (!id || !sel || sel.value === id) return false;
-        for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === id) { sel.value = id; return true; }
-      } catch (e) {}
-      return false;
-    }
     if (typeof renderSaisieSelect === 'function') {
       var origRender = renderSaisieSelect;
-      renderSaisieSelect = function () { var r = origRender.apply(this, arguments); appliquer(); return r; };
+      renderSaisieSelect = function () {
+        try {
+          var id = localStorage.getItem(KEY);
+          if (id && S && !S.salonId && B && B.salons && B.salons.some(function (s) { return s.id === id; })) S.salonId = id;
+        } catch (e) {}
+        var r = origRender.apply(this, arguments);
+        var sel = document.getElementById('sSalon');
+        if (sel) { sel.setAttribute('autocomplete', 'off'); if (S && S.salonId) sel.value = S.salonId; }
+        return r;
+      };
     }
     if (typeof saveLine === 'function') {
       var origSave = saveLine;
       saveLine = function () {
-        try { var sel = document.getElementById('sSalon'); if (sel && sel.value) localStorage.setItem(KEY, sel.value); } catch (e) {}
+        try { if (S && S.salonId) localStorage.setItem(KEY, S.salonId); } catch (e) {}
         return origSave.apply(this, arguments);
       };
     }
-    var sel = document.getElementById('sSalon');
-    if (sel && sel.options.length && appliquer() && sel.onchange) sel.onchange();
   }.toString() + ')();<\/script>';
   html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, function (m) { return patchSaisie + m; }) : html + patchSaisie;
   document.open(); document.write(html); document.close();
