@@ -195,6 +195,32 @@ function afficher(html) {
     + '<script>(' + shim.toString() + ')(' + JSON.stringify(cfg) + ');<\/script>';
   html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, function (m) { return m + tete; }) : tete + html;
   if (!/<title>Consommations/i.test(html)) html = html.replace(/<\/head>/i, '<title>Consommations Halls</title></head>');
+  /* Saisie : rouvrir sur le dernier salon saisi (mémorisé sur l'appareil) */
+  var patchSaisie = '<script>(' + function () {
+    var KEY = 'conso.dernierSalonSaisi';
+    function appliquer() {
+      try {
+        var id = localStorage.getItem(KEY), sel = document.getElementById('sSalon');
+        if (!id || !sel || sel.value === id) return false;
+        for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === id) { sel.value = id; return true; }
+      } catch (e) {}
+      return false;
+    }
+    if (typeof renderSaisieSelect === 'function') {
+      var origRender = renderSaisieSelect;
+      renderSaisieSelect = function () { var r = origRender.apply(this, arguments); appliquer(); return r; };
+    }
+    if (typeof saveLine === 'function') {
+      var origSave = saveLine;
+      saveLine = function () {
+        try { var sel = document.getElementById('sSalon'); if (sel && sel.value) localStorage.setItem(KEY, sel.value); } catch (e) {}
+        return origSave.apply(this, arguments);
+      };
+    }
+    var sel = document.getElementById('sSalon');
+    if (sel && sel.options.length && appliquer() && sel.onchange) sel.onchange();
+  }.toString() + ')();<\/script>';
+  html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, function (m) { return patchSaisie + m; }) : html + patchSaisie;
   document.open(); document.write(html); document.close();
 }
 
