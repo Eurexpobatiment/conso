@@ -207,7 +207,9 @@ if (!/^https:/.test(API_URL)) {
   if (copie) {
     /* Ouverture immédiate avec l'écran gardé sur le téléphone ; mise à jour vérifiée en arrière-plan */
     cfg.majEcran = true;
-    afficher(copie);
+    /* attendre la fin du chargement de cette page : sinon l'écran s'insère dedans au lieu de la remplacer */
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { afficher(copie); });
+    else afficher(copie);
   } else {
     /* Toute première ouverture : on télécharge l'écran */
     fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
