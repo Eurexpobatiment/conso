@@ -51,25 +51,45 @@ function shim(cfg) {
     return k;
   }
 
-  function post(body) {
+  /* Appel au serveur. e.reseau = le serveur n'a pas pu répondre (on peut réessayer / utiliser la copie gardée) ;
+     e.serveur = le serveur a répondu par une erreur (inutile de réessayer).
+     lecture : délai maximum de 45 s et jusqu'à 3 essais. Écriture : un seul essai, sans délai maximum
+     (une écriture coupée en cours de route pourrait être enregistrée deux fois). */
+  function reseau(m) { var e = new Error(m); e.reseau = true; return e; }
+  function post(body, lecture, essais) {
+    essais = essais || (lecture ? 3 : 1);
+    var ctl = lecture && window.AbortController ? new AbortController() : null;
+    var t = ctl && setTimeout(function () { ctl.abort(); }, 45000);
     return fetch(cfg.api, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // évite la pré-requête CORS
       body: JSON.stringify(body),
-      redirect: 'follow'
+      redirect: 'follow',
+      signal: ctl ? ctl.signal : undefined
     }).then(function (r) {
-      if (!r.ok) throw new Error('Erreur serveur (HTTP ' + r.status + ')');
-      return r.json();
+      if (t) clearTimeout(t);
+      if (!r.ok) {
+        var e = new Error('Erreur serveur (HTTP ' + r.status + ')');
+        if (r.status >= 500 || r.status === 429) e.reseau = true;
+        throw e;
+      }
+      return r.json().catch(function () { throw reseau('Réponse illisible du serveur'); });
+    }, function (e) {
+      if (t) clearTimeout(t);
+      throw reseau(e && e.name === 'AbortError' ? 'Le serveur met trop de temps à répondre' : 'Pas de connexion au serveur');
     }).then(function (j) {
       if (!j.ok) {
         if (/Clé PWA/.test(j.error)) LS.removeItem('pwa_cle');
         var e = new Error(j.error); e.serveur = true; throw e;
       }
       return j.data;
+    }).catch(function (e) {
+      if (e.reseau && essais > 1) return new Promise(function (ok) { setTimeout(ok, 1500); }).then(function () { return post(body, lecture, essais - 1); });
+      throw e;
     });
   }
 
-  function horsLigne(e) { return !navigator.onLine || (e && !e.serveur && e.name === 'TypeError'); }
+  function horsLigne(e) { return !navigator.onLine || !!(e && e.reseau); }
 
   /* File d'attente des saisies faites sans réseau */
   function fileLire(){ return lsGet('pwa_file') || {}; }
@@ -80,23 +100,29 @@ function shim(cfg) {
   }
   var envoiEnCours = false;
   function fileEnvoyer() {
-    var f = fileLire(), cles = Object.keys(f);
+    var f = fileLire(), cles = Object.keys(f).filter(function (k) { return !f[k].err; });
     if (!cles.length || envoiEnCours || !navigator.onLine) return;
     envoiEnCours = true;
-    var n = 0;
+    var n = 0, refus = [];
     cles.sort(function(a,b){ return f[a].t - f[b].t; });
     cles.reduce(function (p, k) {
       return p.then(function () {
         return post({ fn: f[k].fn, args: f[k].args, cle: cle() }).then(function () {
           var g = fileLire(); if (g[k] && g[k].t === f[k].t) delete g[k]; lsSet('pwa_file', g); n++;
+        }, function (e) {
+          if (!e.serveur) throw e; // réseau : on arrête et on réessaiera plus tard
+          /* refusée par le serveur : mise de côté pour ne pas bloquer les suivantes */
+          var g = fileLire(); if (g[k]) { g[k].err = e.message; lsSet('pwa_file', g); } refus.push(e.message);
         });
       });
     }, Promise.resolve()).catch(function(){}).then(function () {
       envoiEnCours = false;
-      if (n && typeof window.toast === 'function')
-        window.toast(n + ' saisie(s) hors ligne envoyée(s). Rechargez pour voir les calculs à jour.');
+      if (typeof window.toast !== 'function') return;
+      if (n) window.toast(n + ' saisie(s) hors ligne envoyée(s). Rechargez pour voir les calculs à jour.');
+      if (refus.length) setTimeout(function () { window.toast(refus.length + ' saisie(s) hors ligne refusée(s) par le serveur : ' + refus[0]); }, n ? 3500 : 0);
     });
   }
+  setInterval(fileEnvoyer, 60000);
   window.addEventListener('online', fileEnvoyer);
   setTimeout(fileEnvoyer, 1500);
 
@@ -105,7 +131,7 @@ function shim(cfg) {
     var body = { fn: fn, args: args };
     if (!lecture) body.cle = cle();
     var kc = 'pwa_c_' + fn + JSON.stringify(args);
-    return post(body).then(function (d) {
+    return post(body, lecture).then(function (d) {
       if (lecture) lsSet(kc, d);
       return d;
     }, function (e) {
@@ -144,6 +170,18 @@ function shim(cfg) {
     run: runner(null, null),
     host: { close: function(){}, setHeight: function(){}, setWidth: function(){}, editor: {} }
   }};
+
+  /* Écran ouvert depuis la copie du téléphone : on vérifie en arrière-plan s'il existe une version plus récente,
+     qui sera utilisée à la prochaine ouverture (jamais en cours d'utilisation). */
+  if (cfg.majEcran) setTimeout(function () {
+    post({ fn: '__html' }, true).then(function (h) {
+      var avant = null; try { avant = LS.getItem('pwa_html'); } catch (e) {}
+      if (h && h !== avant) {
+        try { LS.setItem('pwa_html', h); } catch (e) {}
+        if (typeof window.toast === 'function') window.toast('Nouvelle version de l’appli téléchargée : elle sera utilisée à la prochaine ouverture.');
+      }
+    }).catch(function () {});
+  }, 3000);
 }
 
 /* ---------- Chargement de l'interface (Index.html servi par Apps Script) ---------- */
@@ -165,19 +203,25 @@ function erreur(t) { document.getElementById('msg').innerHTML = t; }
 if (!/^https:/.test(API_URL)) {
   erreur('Réglage manquant : renseignez <b>API_URL</b> dans index.html avec l’URL /exec du déploiement Apps Script.');
 } else {
-  fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                   body: JSON.stringify({ fn: '__html' }), redirect: 'follow' })
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      if (!j.ok) throw new Error(j.error);
-      try { localStorage.setItem('pwa_html', j.data); } catch (e) {}
-      afficher(j.data);
-    })
-    .catch(function (e) {
-      var h = null; try { h = localStorage.getItem('pwa_html'); } catch (x) {}
-      if (h) afficher(h);
-      else erreur('Impossible de charger l’appli (' + (e && e.message || e) + ').<br><br><button onclick="location.reload()">Réessayer</button>');
-    });
+  var copie = null; try { copie = localStorage.getItem('pwa_html'); } catch (x) {}
+  if (copie) {
+    /* Ouverture immédiate avec l'écran gardé sur le téléphone ; mise à jour vérifiée en arrière-plan */
+    cfg.majEcran = true;
+    afficher(copie);
+  } else {
+    /* Toute première ouverture : on télécharge l'écran */
+    fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                     body: JSON.stringify({ fn: '__html' }), redirect: 'follow' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error);
+        try { localStorage.setItem('pwa_html', j.data); } catch (e) {}
+        afficher(j.data);
+      })
+      .catch(function (e) {
+        erreur('Impossible de charger l’appli (' + (e && e.message || e) + ').<br><br><button onclick="location.reload()">Réessayer</button>');
+      });
+  }
 }
 </script>
 </body>

@@ -1,6 +1,6 @@
 /* Service worker : met en cache l'enveloppe de la PWA pour qu'elle s'ouvre sans réseau.
    Les données (appels Apps Script) ne passent pas par ici : elles sont gérées dans index.html. */
-var CACHE = 'conso-halls-v1';
+var CACHE = 'conso-halls-v2';
 var FICHIERS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
