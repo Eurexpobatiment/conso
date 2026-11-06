@@ -32,7 +32,7 @@
   /* ================= Firebase ================= */
   var D = { params: {}, halls: [], lignes: [], corr: {}, salons: [], releves: {}, srv: {}, logo: '', temp: null };
   var A, F, auth, db;
-  var recu = {}, attendus = ['config', 'salons', 'releves', 'srv', 'temp'];
+  var recu = {}, attendus = ['config', 'salons', 'releves', 'srv', 'temp', 'logo'];
   var pret, pretOk, pretKo;
   pret = new Promise(function (ok, ko) { pretOk = ok; pretKo = ko; });
   function arrive(k) { recu[k] = true; if (attendus.every(function (x) { return recu[x]; })) pretOk(); }
@@ -82,7 +82,7 @@
       if (s.exists()) { try { D.srv = JSON.parse(s.data().json || '{}'); } catch (e) { D.srv = {}; } }
       if (s.exists() || !s.metadata.fromCache) arrive('srv');
     }, ko);
-    F.onSnapshot(F.doc(db, 'ConsoServeur', 'logo'), function (s) { if (s.exists()) D.logo = s.data().data || ''; }, function () {});
+    F.onSnapshot(F.doc(db, 'ConsoServeur', 'logo'), function (s) { if (s.exists()) D.logo = s.data().data || ''; if (s.exists() || !s.metadata.fromCache) arrive('logo'); }, function () { arrive('logo'); });
     // Températures des halls : appli Dalkia (même projet Firebase)
     var pts = null, seuils = {}, rel = null;
     function majTemp() {
