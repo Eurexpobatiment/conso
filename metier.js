@@ -148,8 +148,8 @@
       if (srv.siteOk) {
         var e = 0, g = 0, nb = 0;
         for (var d = dayNum_(s.debut); d <= dayNum_(s.fin); d++) { var j = jours[isoFromDayNum_(d)]; if (j) { e += j.e; g += j.g; nb++; } }
-        s.elecParc = nb ? Math.round(e * 1000) / 1000 : '';
-        s.gaz = nb ? Math.round(g * 1000) / 1000 : '';
+        // jours relevés dans Conso_Site : valeurs recalculées ; aucun jour (ex. salons d'avant 2026) : valeurs saisies gardées
+        if (nb) { s.elecParc = Math.round(e * 1000) / 1000; s.gaz = Math.round(g * 1000) / 1000; }
       }
       var t = 0, n = 0;
       for (var k = dayNum_(s.debut); k <= dayNum_(s.fin); k++) { var v = park[isoFromDayNum_(k)]; if (v !== undefined && v !== null) { t += v; n++; } }
@@ -375,12 +375,55 @@
     var salons = appliquerSite(readSalons(D), D);
     return { P: P, halls: halls, lignes: lignes, salons: salons, releves: readReleves(D), meteo: readMeteo(D), T: readTemp(D, halls) };
   }
+  /* ---------- comparaison avec l'édition précédente d'un même salon ---------- */
+  var MOTS_VIDES = ['salon', 'de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'et', 'lyon', 'eurexpo', 'en', 'au', 'a'];
+  function mots(nom) {
+    return String(nom || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ')
+      .filter(function (m) { return m && MOTS_VIDES.indexOf(m) < 0; });
+  }
+  /** Édition précédente : salon d'une année antérieure au nom le plus proche (au moins la moitié des mots en commun,
+   *  ou un mot commun et des dates à moins de 30 jours d'écart d'une année sur l'autre) ; la plus récente à score égal. */
+  function editionPrecedente(s, tous) {
+    if (!s.debut) return null;
+    var a = mots(s.salon), best = null, bestSc = 0;
+    if (!a.length) return null;
+    tous.forEach(function (x) {
+      if (!x.debut || x.id === s.id || x.debut.slice(0, 4) >= s.debut.slice(0, 4)) return;
+      var b = mots(x.salon), inter = a.filter(function (m) { return b.indexOf(m) >= 0; }).length;
+      if (!inter) return;
+      var union = a.length + b.length - inter, jac = inter / union;
+      var ecart = Math.abs(((dayNum_(s.debut) - dayNum_(x.debut)) % 365.25 + 365.25 + 182) % 365.25 - 182);
+      if (jac < 0.5 && ecart > 30) return;
+      var sc = jac + (ecart <= 30 ? 0.5 : 0) + x.debut.slice(0, 4) / 1e5;
+      if (sc > bestSc) { bestSc = sc; best = x; }
+    });
+    return best;
+  }
+  function resumeComparaison(x) {
+    var o = x.ind, f = x.fige === 'OUI';
+    var manque = function (k) { return f && (x[k] === '' || x[k] === null || x[k] === undefined); };
+    return {
+      id: x.id, salon: x.salon, debut: x.debut, fin: x.fin, fige: x.fige,
+      jours: o.jours, surface: o.surfaceLouee, elec: o.elec, cvc: manque('fCVC') ? '' : o.cvc, fm: manque('fFM') ? '' : o.fm, ecl: manque('fECL') ? '' : o.ecl,
+      elecParc: x.elecParc, gaz: x.gaz, pv: o.pvSite, elecGaz: o.elecGaz, djuJour: o.djuJour, kwhM2Jour: o.kwhM2Jour,
+      kwhM2DJU: manque('fCVC') ? '' : o.kwhM2DJU, prevision: o.prevision, ecart: o.ecart, tMoy: o.temp && o.temp.moy !== undefined ? o.temp.moy : ''
+    };
+  }
+
   function getBootstrap(D) {
     var X = tout(D), T = X.T;
+    var tous = salonsCalcules_(D, X.P, X.halls, X.lignes, X.salons, X.releves, X.meteo, T);
+    var annee = tous.filter(function (s) { return salonDansAnnee_(s, X.P.annee); });
+    var comparaisons = {};
+    annee.forEach(function (s) {
+      var p = editionPrecedente(s, tous);
+      if (p) comparaisons[s.id] = { avant: resumeComparaison(p), maintenant: resumeComparaison(s) };
+    });
     return {
+      comparaisons: comparaisons,
       params: X.P, halls: X.halls,
       lignes: X.lignes.map(function (L) { return { id: L.id, tgbt: L.tgbt, ligne: L.ligne, nb: L.nb, coefs: L.coefs, usage: L.usage, total: L.total }; }),
-      salons: salonsCalcules_(D, X.P, X.halls, X.lignes, X.salons, X.releves, X.meteo, T).filter(function (s) { return salonDansAnnee_(s, X.P.annee); }),
+      salons: annee,
       meteo: meteoResume_(X.P, X.meteo), hist: (D.srv && D.srv.hist) || [],
       temp: T.err ? { err: T.err } : { cols: T.cols, corr: T.corr, seuilBas: T.seuilBas, seuilHaut: T.seuilHaut, nRows: T.rows.length, url: T.url },
       sheetUrl: (D.srv && D.srv.sheetUrl) || '',
@@ -495,6 +538,6 @@
   root.M = {
     getBootstrap: getBootstrap, getSalonCalcule: getSalonCalcule, getReleves: getReleves,
     preparerSalon: preparerSalon, nettoyerLigne: nettoyerLigne, cinq: cinq, num: num_, iso: iso_, maintenant: maintenant,
-    defaultCorr: defaultCorr_, SALON_KEYS: SALON_KEYS
+    defaultCorr: defaultCorr_, SALON_KEYS: SALON_KEYS, mots: mots
   };
 })(typeof window !== 'undefined' ? window : this);

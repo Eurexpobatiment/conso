@@ -448,6 +448,7 @@ window.chargerOngletEau = function(){
     <div id="psBanner"></div>
     <div id="psRapport"></div>
     <div class="card" id="psResCard"><h2>Résultats</h2><div class="res" id="psRes"></div></div>
+    <div class="card" id="psCompCard" style="display:none"><h2 id="psCompTitre">Comparaison avec l'édition précédente</h2><div id="psComp"></div></div>
     <div class="card" id="psTgbtCard"><h2>Consommations par TGBT / hall</h2><div id="psTgbt"></div></div>
     <div class="card" id="psTempCard"><h2>Températures des halls</h2><div id="psTemp"></div></div>
     <div class="card">
@@ -1548,6 +1549,41 @@ function chEtat(){run('chEtatCharte').then(function(e){$('chEtat').innerHTML=(e.
     var origSave = saveLine;
     saveLine = function () { try { if (S && S.salonId) localStorage.setItem(KEY, S.salonId); } catch (e) {} return origSave.apply(this, arguments); };
   }
+})();
+</script>
+<script>
+/* ============ Fiche salon : comparaison avec l'édition précédente (même salon, année antérieure) ============ */
+(function () {
+  function n(v) { return typeof v === 'number' && isFinite(v); }
+  function ligne(lib, a, b, d, unite) {
+    var ec = n(a) && n(b) && b !== 0 ? (a / b - 1) : null;
+    var cl = ec === null ? '' : (Math.abs(ec) < 0.05 ? '' : (ec > 0 ? 'bad' : 'good'));
+    return '<tr><td style="text-align:left">' + lib + '</td><td><b>' + (n(a) ? fmt(a, d) : '—') + '</b></td><td>' + (n(b) ? fmt(b, d) : '—') + '</td><td>' +
+      (ec === null ? '' : '<span class="badge ' + cl + '">' + pct(ec) + '</span>') + '</td></tr>';
+  }
+  function rendre(s) {
+    var card = $('psCompCard'), c = s && s.id && B && B.comparaisons ? B.comparaisons[s.id] : null;
+    if (!c) { card.style.display = 'none'; return; }
+    var A = c.maintenant, P = c.avant, ya = (A.debut || '').slice(0, 4), yp = (P.debut || '').slice(0, 4);
+    // valeurs à jour de la fiche (après une saisie) pour l'année en cours
+    if (s.ind) { var o = s.ind; A = Object.assign({}, A, { jours: o.jours, surface: o.surfaceLouee, elec: o.elec, cvc: o.cvc, fm: o.fm, ecl: o.ecl, elecParc: s.elecParc, gaz: s.gaz, elecGaz: o.elecGaz, djuJour: o.djuJour, kwhM2Jour: o.kwhM2Jour, kwhM2DJU: o.kwhM2DJU, tMoy: o.temp && n(o.temp.moy) ? o.temp.moy : '' }); }
+    card.style.display = '';
+    $('psCompTitre').textContent = 'Comparaison avec ' + P.salon + ' ' + yp;
+    var h = '<div class="tablewrap" style="max-height:none"><table><thead><tr><th style="text-align:left">Indicateur</th><th>' + esc(ya) + '</th><th>' + esc(yp) + '</th><th>Écart</th></tr></thead><tbody>' +
+      '<tr><td style="text-align:left">Dates</td><td>' + dfr(A.debut) + ' → ' + dfr(A.fin) + '</td><td>' + dfr(P.debut) + ' → ' + dfr(P.fin) + '</td><td></td></tr>' +
+      ligne('Jours', A.jours, P.jours, 0) + ligne('Surface louée (m²)', A.surface, P.surface, 0) +
+      ligne('Élec halls (MWh)', A.elec, P.elec) + ligne('dont CVC (MWh)', A.cvc, P.cvc) + ligne('dont FM (MWh)', A.fm, P.fm) +
+      ligne('Élec parc Enedis (MWh)', A.elecParc, P.elecParc) + ligne('Gaz (MWh)', A.gaz, P.gaz) + ligne('Élec halls + gaz (MWh)', A.elecGaz, P.elecGaz) +
+      ligne('DJU / jour', A.djuJour, P.djuJour) + ligne('kWh/m²/jour (élec + gaz)', A.kwhM2Jour, P.kwhM2Jour, 2) + ligne('kWh/m²/DJU (CVC + gaz)', A.kwhM2DJU, P.kwhM2DJU, 3) +
+      ligne('T moyenne halls (°C)', A.tMoy, P.tMoy) + '</tbody></table></div>';
+    var notes = [];
+    if (P.fige === 'OUI') notes.push(yp + ' : valeurs figées' + (P.cvc === '' ? ' (CVC non relevé : ratio kWh/m²/DJU non comparable)' : ''));
+    notes.push('Édition rapprochée par le nom du salon (renommer l\'un des deux si le rapprochement est faux ou manquant). Écart : vert = baisse, rouge = hausse de plus de 5 %.');
+    h += '<div class="small muted" style="margin-top:6px">' + notes.map(esc).join('<br>') + '</div>';
+    $('psComp').innerHTML = h;
+  }
+  var orig = window.renderSalonRes;
+  window.renderSalonRes = renderSalonRes = function (s) { var r = orig.apply(this, arguments); try { rendre(s); } catch (e) { console.error('comparaison', e); } return r; };
 })();
 </script>
 </body>
