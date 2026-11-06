@@ -4,7 +4,9 @@ Même appli (mêmes onglets, mêmes calculs, mêmes rapports PDF), avec les donn
 (projet `equipe-batiment`, comme les applis Équipe, Températures et Relevés compteurs) au lieu du Google Sheet :
 ouverture instantanée, consultation et saisie des index même sans réseau (envoi automatique au retour du réseau).
 
-Adresse de test : https://eurexpobatiment.github.io/conso/v2/ — l'appli actuelle reste en service à côté.
+Adresse : https://eurexpobatiment.github.io/conso/ (version Firebase en service depuis le 6 nov. 2026 ; /v2/ redirige ici).
+Mise en place faite le 6 nov. 2026 : règles publiées, ConsoSecret/code et CONSO_CODE créés, classeur copié (133 lignes, 27 salons),
+script en version 58, bascule faite (installerFirebase). Le classeur n'est plus qu'une copie de Firebase.
 
 ## Ce qui change pour toi
 - **Réglages modifiables dans l'appli**, plus dans le Google Sheet : paramètres de calcul, surfaces des halls,
