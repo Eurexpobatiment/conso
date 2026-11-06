@@ -1,0 +1,55 @@
+    // ===================== Appli Consommations halls =====================
+    // Bloc à coller dans les règles Firestore du projet equipe-batiment, JUSTE AVANT les deux
+    // dernières accolades « } » de la fin (à l'intérieur de « match /databases/{db}/documents { »).
+    // Le code des réglages est dans le document ConsoSecret/code (champ « code »), que personne ne peut lire.
+    // Comme l'appli actuelle : consultation libre, saisie des index et des salons sans code ;
+    // le code n'est demandé que pour modifier les réglages (paramètres, surfaces, lignes de comptage, correspondance).
+
+    function cSecret() { return get(/databases/$(db)/documents/ConsoSecret/code).data.code; }
+    function cSession() {
+      return request.auth != null
+        && exists(/databases/$(db)/documents/ConsoSessions/$(request.auth.uid))
+        && get(/databases/$(db)/documents/ConsoSessions/$(request.auth.uid)).data.code == cSecret();
+    }
+
+    // Réglages : params, halls, lignes, corr (code des réglages)
+    match /ConsoConfig/{id} {
+      allow read: if true;
+      allow write: if cSession() && (
+        (id == 'params' && request.resource.data.keys().hasOnly(['p']) && request.resource.data.p is map
+          && !('MeteoCle' in request.resource.data.p))
+        || (id == 'halls' && request.resource.data.keys().hasOnly(['liste']) && request.resource.data.liste is list && request.resource.data.liste.size() <= 200)
+        || (id == 'lignes' && request.resource.data.keys().hasOnly(['liste']) && request.resource.data.liste is list && request.resource.data.liste.size() <= 1000)
+        || (id == 'corr' && request.resource.data.keys().hasOnly(['map']) && request.resource.data.map is map));
+    }
+
+    // Salons (un document par salon) et index (un document par salon, lignes dans le champ l)
+    match /ConsoSalons/{id} {
+      allow read: if true;
+      allow create, update: if request.auth != null && id.size() <= 20 && request.resource.data.id == id
+        && request.resource.data.keys().hasOnly(['id', 'salon', 'debut', 'fin', 'confort', 'halls', 'surface', 'elecParc', 'pv', 'gaz',
+          'djuForces', 'elecMontage', 'joursMontage', 'dateAvant', 'dateApres', 'fige', 'fElec', 'fCVC', 'fFM', 'fECL', 'notes']);
+      allow delete: if request.auth != null;
+    }
+    match /ConsoReleves/{id} {
+      allow read: if true;
+      allow create, update: if request.auth != null && id.size() <= 20
+        && request.resource.data.keys().hasOnly(['l']) && request.resource.data.l is map && request.resource.data.l.size() <= 1000;
+      allow delete: if request.auth != null;
+    }
+
+    // Données publiées par le script Google (météo, DJU, Conso_Site, PV, logo)
+    match /ConsoServeur/{id} {
+      allow read: if true;
+      allow write: if cSession() && id in ['donnees', 'logo'];
+    }
+
+    // Un appareil (ou le script) qui a donné le bon code (connexion anonyme)
+    match /ConsoSessions/{uid} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['code', 'at'])
+        && request.resource.data.code == cSecret();
+    }
+    // ConsoSecret : aucune règle = ni lecture ni écriture depuis les applis (modifiable dans la console seulement)
+    // ===================== fin Consommations halls =====================
