@@ -80,15 +80,10 @@ function Detail($err) {
 
 # ======================= PcVue =======================
 function JetonPcVue {
-  $corps = @{ grant_type = 'password'; client_id = [string]$PV.client_id
+  $corps = @{ grant_type = 'password'; client_id = [string]$PV.client_id; client_secret = [string]$PV.client_secret
               username = [string]$PV.utilisateur; password = [string]$PV.mot_de_passe; scope = 'RealtimeData' }
-  if ([string]$PV.client_secret) { $corps.client_secret = [string]$PV.client_secret }
   try { $r = Invoke-RestMethod -Method Post -Uri $URL_JETON -Body $corps -ContentType 'application/x-www-form-urlencoded' -TimeoutSec 30 }
-  catch {
-    $d = Detail $_
-    if ($d -match 'unauthorized_client|unsupported_grant_type|invalid_client|invalid_scope') { $d += ' => le client « ' + $PV.client_id + ' » n''autorise pas cette connexion : demander à l''intégrateur un client OAuth pour l''API (Web Services Toolkit REST), avec connexion par mot de passe et accès RealtimeData.' }
-    throw ('Connexion à PcVue refusée (' + $URL_JETON + ') : ' + $d)
-  }
+  catch { throw ('Connexion à PcVue refusée (' + $URL_JETON + ') : ' + (Detail $_)) }
   if (-not $r.access_token) { throw 'PcVue n''a pas renvoyé de jeton.' }
   return [string]$r.access_token
 }
