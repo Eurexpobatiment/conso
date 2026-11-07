@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <script src="metier.js"></script>
 <script src="donnees.js"></script>
+<script src="gtc.js"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function(){});</script>
 <style>
 :root{
@@ -386,6 +387,19 @@ details.tg[open] summary .chev{transform:rotate(90deg)}
 @keyframes eauspin{to{transform:rotate(360deg)}}
 @media (max-width:600px){#onglet-eau .kpis{grid-template-columns:repeat(2,1fr)}#onglet-eau .hide-sm{display:none}#onglet-eau .hb{grid-template-columns:62px 1fr 54px}}
 </style>
+<style>
+#v-gtc .gtc-barre{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+#v-gtc .gtc-barre input[type=date]{width:auto}
+#v-gtc .gtc-leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-2);margin:2px 2px 6px}
+#v-gtc .gtc-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+#v-gtc .gtc-chart{height:auto;margin-bottom:10px}
+#v-gtc .gtc-kpis{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+#v-gtc .gtc-k3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+#v-gtc .gtc-k3 .v{font-size:19px}
+#v-gtc .card h2{margin-top:2px}
+#v-gtc sup{color:var(--warn);font-weight:700}
+</style>
+<section class="view" id="v-gtc"><div id="gtc-contenu"></div></section>
 <section class="view" id="v-eau"><div id="onglet-eau"><div id="onglet-eau-contenu"></div></div></section>
 <script>
 (function(){
@@ -528,7 +542,7 @@ function replaceSalon(s){
 /* ============ Navigation ============ */
 var TABS=[['dash','Tableau','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['salons','Salons','<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>'],
   ['saisie','Saisie','<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/>'],['meteo','Météo','<path d="M14 14.8V4a2 2 0 10-4 0v10.8a4 4 0 104 0z"/>'],
-  ['pv','PV','<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'],['eau','Eau','<path d="M12 3c3.5 4.5 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.5-6.5 6-11z"/>'],['reglages','Réglages','<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>']];
+  ['pv','PV','<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'],['eau','Eau','<path d="M12 3c3.5 4.5 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.5-6.5 6-11z"/>'],['gtc','GTC','<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 12l3-3 2 2 4-4"/>'],['reglages','Réglages','<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>']];
 (function(){
   var nav=document.createElement('nav');nav.className='tabs';
   nav.innerHTML=TABS.map(function(t){return '<button data-v="'+t[0]+'"><svg viewBox="0 0 24 24">'+t[2]+'</svg>'+t[1]+'</button>'}).join('');
@@ -543,6 +557,7 @@ function go(v){
   if(v==='dash')setTimeout(renderCharts,30);
 if(v==='pv'&&!PV.data)loadPV();
 if(v==='reglages')chEtat();
+if(v==='gtc'&&window.gtcAfficher)setTimeout(gtcAfficher,20);
 if(v==='eau'&&window.chargerOngletEau&&!window.__eauOk){window.__eauOk=1;chargerOngletEau();}
 }
 

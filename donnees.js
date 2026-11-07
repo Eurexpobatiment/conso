@@ -30,6 +30,7 @@
   function withTimeout(p, ms, m) { return Promise.race([p, wait(ms).then(function () { throw new Error(m); })]); }
 
   /* ================= Firebase ================= */
+  var gtcAbonnes = [];
   var D = { params: {}, halls: [], lignes: [], corr: {}, salons: [], releves: {}, srv: {}, logo: '', temp: null };
   var A, F, auth, db;
   var recu = {}, attendus = ['config', 'salons', 'releves', 'srv', 'temp', 'logo'];
@@ -82,6 +83,13 @@
       if (s.exists()) { try { D.srv = JSON.parse(s.data().json || '{}'); } catch (e) { D.srv = {}; } }
       if (s.exists() || !s.metadata.fromCache) arrive('srv');
     }, ko);
+    // Compteurs GTC (PcVue) : écoutés en direct, sans bloquer l'ouverture de l'appli
+    F.onSnapshot(F.collection(db, 'ConsoGTC'), function (s) {
+      var j = {}, etat = null;
+      s.docs.forEach(function (d) { if (d.id === 'etat') etat = d.data(); else if (d.id.indexOf('j-') === 0) j[d.id.slice(2)] = d.data(); });
+      D.gtc = { etat: etat, jours: j, cache: s.metadata.fromCache };
+      gtcAbonnes.forEach(function (f) { try { f(D.gtc); } catch (e) { console.error(e); } });
+    }, function (e) { D.gtc = { err: fbErr(e), jours: {} }; gtcAbonnes.forEach(function (f) { try { f(D.gtc); } catch (x) {} }); });
     F.onSnapshot(F.doc(db, 'ConsoServeur', 'logo'), function (s) { if (s.exists()) D.logo = s.data().data || ''; if (s.exists() || !s.metadata.fromCache) arrive('logo'); }, function () { arrive('logo'); });
     // Températures des halls : appli Dalkia (même projet Firebase)
     var pts = null, seuils = {}, rel = null;
@@ -298,5 +306,7 @@
     } });
   }
   window.google = { script: { run: runner(null, null), host: { close: function () {}, setHeight: function () {}, setWidth: function () {}, editor: {} } } };
-  window.CONSO_FB = { D: D, appel: appel };
+  window.CONSO_FB = { D: D, appel: appel,
+    /* onglet GTC : f(D.gtc) appelé à chaque changement (et tout de suite si déjà reçu) */
+    gtc: function (f) { gtcAbonnes.push(f); if (D.gtc) f(D.gtc); } };
 })();

@@ -1,0 +1,20 @@
+{
+  "pcvue": {
+    "url": "https://NOM-DU-SERVEUR-WEB-PCVUE",
+    "url_jeton": "",
+    "client_id": "A-DEMANDER-A-L-INTEGRATEUR",
+    "client_secret": "A-DEMANDER-A-L-INTEGRATEUR",
+    "utilisateur": "compte-pcvue-lecture-seule",
+    "mot_de_passe": "mot-de-passe",
+    "verifier_certificat": false
+  },
+  "firebase": {
+    "code": "CODE-DES-REGLAGES-DE-L-APPLI",
+    "proxy": ""
+  },
+  "compteurs": [
+    { "id": "pdl1", "nom": "PDL 1", "type": "elec", "unite": "kWh", "coef": 1, "variable": "NOM.COMPLET.VARIABLE.INDEX.PDL1" },
+    { "id": "pdl2", "nom": "PDL 2", "type": "elec", "unite": "kWh", "coef": 1, "variable": "NOM.COMPLET.VARIABLE.INDEX.PDL2" },
+    { "id": "gaz",  "nom": "Gaz",   "type": "gaz",  "unite": "kWh", "coef": 1, "variable": "NOM.COMPLET.VARIABLE.INDEX.GAZ" }
+  ]
+}

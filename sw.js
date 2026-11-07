@@ -1,8 +1,8 @@
 /* Service worker de la version Firebase : garde l'écran de l'appli et les modules Firebase sur l'appareil.
    Les données sont gardées par Firebase (copie locale), pas ici. */
-var CACHE = 'conso-fb-v5';
+var CACHE = 'conso-fb-v6';
 var FBV = '10.14.1';
-var SHELL = ['./', 'index.html', 'metier.js', 'donnees.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
+var SHELL = ['./', 'index.html', 'metier.js', 'donnees.js', 'gtc.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'https://www.gstatic.com/firebasejs/' + FBV + '/firebase-app.js',
   'https://www.gstatic.com/firebasejs/' + FBV + '/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/' + FBV + '/firebase-firestore.js'];

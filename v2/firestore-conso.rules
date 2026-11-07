@@ -44,6 +44,12 @@
       allow write: if cSession() && id in ['donnees', 'logo'];
     }
 
+    // Compteurs GTC (PcVue) envoyés par le relais du site : un document par jour (j-AAAA-MM-JJ) + l'état du relais
+    match /ConsoGTC/{id} {
+      allow read: if true;
+      allow write: if cSession() && (id == 'etat' || id.matches('j-[0-9]{4}-[0-9]{2}-[0-9]{2}'));
+    }
+
     // Un appareil (ou le script) qui a donné le bon code (connexion anonyme)
     match /ConsoSessions/{uid} {
       allow read, delete: if request.auth != null && request.auth.uid == uid;
