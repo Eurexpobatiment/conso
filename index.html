@@ -984,6 +984,8 @@ function renderSum(s){
   var o=s.ind;
   $('sSum').innerHTML=[['Élec halls',o.elec],['CVC',o.cvc],['FM',o.fm],['ECL',o.ecl]].map(function(x){return '<div><div class="l">'+x[0]+' MWh</div><div class="v">'+fmt(x[1])+'</div></div>'}).join('')+
     (s.fige==='OUI'?'<div style="grid-column:1/-1;background:var(--warn-soft);color:var(--warn)" class="small">Ce salon affiche les valeurs Excel figées ; les index modifiés ici n\'apparaîtront qu\'après « Utiliser le calcul à partir des index » dans sa fiche.</div>':'');
+  var h=String(s.halls||'').split(',').map(function(x){return x.trim()}).filter(Boolean);
+  $('sSum').insertAdjacentHTML('afterbegin','<div style="grid-column:1/-1" class="small"><span class="muted">Halls du salon ('+h.length+') :</span> '+(h.length?h.map(esc).join(' · '):'aucun hall coché')+'</div>');
 }
 $('sBody').addEventListener('toggle',function(e){var d=e.target;if(d.tagName==='DETAILS'){S.open=S.open||{};S.open[d.dataset.tg]=d.open}},true);
 $('sBody').addEventListener('keydown',function(e){
