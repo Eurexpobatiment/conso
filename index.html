@@ -1003,7 +1003,18 @@ $('sBody').addEventListener('change',function(e){
   inp.classList.remove('prop');
   S.data.releves[L.id]=cur;
   saveLine(L,cur);
+  autoDateReleve(v);
 });
+/* Date du relevé : date du jour par défaut, posée à la première saisie d'index de la phase */
+function autoDateReleve(v){
+  if(v===''||v==null)return;
+  var s=salonById(S.salonId); if(!s)return;
+  if(S.phase==='av'?s.dateAvant:s.dateApres)return;
+  var d=today(), sid=S.salonId;
+  if(S.phase==='av')s.dateAvant=d; else s.dateApres=d;
+  $('sDate').value=d;
+  run('setDatesReleve',sid,s.dateAvant||'',s.dateApres||'').then(function(r){replaceSalon(r);toast('Date du relevé : '+dfr(d))}).catch(function(e){toast(errMsg(e),1)});
+}
 function saveLine(L,cur){
   var st=$('st-'+L.id); if(st)st.className='st saving';
   var sid=S.salonId;
