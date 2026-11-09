@@ -298,8 +298,10 @@ details.tg[open] summary .chev{transform:rotate(90deg)}
 <input type="month" id="pvMoisSel" style="width:auto">
 <button class="btn sm" id="pvNext" title="Mois suivant">›</button>
 <span class="spacer"></span>
+<button class="btn sm" id="pvBtnFs" title="Récupérer la production PV du hall 4.3 du mois affiché sur FusionSolar">Actualiser FusionSolar</button>
 <button class="btn primary sm" id="pvBtnPdf">Rapport PDF</button>
 </div>
+<div id="pvFsMsg"></div>
 <div id="pvPdfMsg"></div>
 <div class="kpis" id="pvKpis"></div>
 <div class="card"><h2>Production journalière</h2><div id="pvChart"></div></div>
@@ -1217,7 +1219,51 @@ function pvNice(m){var p=Math.pow(10,Math.floor(Math.log(m)/Math.LN10)),f=m/p;re
 function loadPV(m){
   PV.mois=m||PV.mois||pvMoisPrec();$('pvMoisSel').value=PV.mois;
   $('pvKpis').innerHTML='<div class="muted">Chargement…</div>';
-  return run('pvMois',PV.mois).then(function(d){PV.data=d;renderPV()}).catch(function(e){$('pvKpis').innerHTML='';toast(errMsg(e),true)});
+  return run('pvMois',PV.mois).then(function(d){PV.data=d;renderPV();pvFusionAuto()}).catch(function(e){$('pvKpis').innerHTML='';toast(errMsg(e),true)});
+}
+/* ---- FusionSolar (PV hall 4.3) : relais Google Apps Script « Relais FusionSolar PV 4.3 » ---- */
+var FS_URL='https://script.google.com/macros/s/AKfycbyhoHfIh_EbvBNRNSKtpwymk4KPOA7EqEl2FOnyH0zhhVwNQiBzHMtQJKcPAb_xUmNc/exec';
+var FS_RECENT=6*3600*1000; // actualisation automatique au plus toutes les 6 h par mois
+function fsKey(){try{return localStorage.getItem('conso_fs_key')||''}catch(e){return ''}}
+function fsAskKey(then){
+  $('pvFsMsg').innerHTML='<div class="banner info">Clé du relais FusionSolar (RELAY_KEY, demandée une fois sur cet appareil) : '
+    +'<input type="password" id="pvFsKey" style="width:180px"> <button type="button" class="btn sm primary" id="pvFsOk">Valider</button> '
+    +'<button type="button" class="btn sm" id="pvFsNo">Annuler</button></div>';
+  $('pvFsKey').focus();
+  $('pvFsNo').onclick=function(){$('pvFsMsg').innerHTML=''};
+  $('pvFsOk').onclick=function(){var k=$('pvFsKey').value.trim();if(!k)return;try{localStorage.setItem('conso_fs_key',k)}catch(e){}$('pvFsMsg').innerHTML='';then()};
+}
+function pvFusion(auto){
+  var k=fsKey(),mois=PV.mois;
+  if(!k){if(!auto)fsAskKey(function(){pvFusion(false)});return Promise.resolve()}
+  var b=$('pvBtnFs');b.disabled=true;b.textContent='FusionSolar…';
+  var fin=function(){b.disabled=false;b.textContent='Actualiser FusionSolar'};
+  return fetch(FS_URL+'?key='+encodeURIComponent(k)+'&action=jour&date='+mois+'-15').then(function(r){return r.json()}).then(function(r){
+    if(!r.ok){
+      if(/clé invalide/.test(r.erreur||'')){try{localStorage.removeItem('conso_fs_key')}catch(e){}if(!auto)fsAskKey(function(){pvFusion(false)})}
+      throw new Error('FusionSolar : '+(r.erreur||'erreur'));
+    }
+    try{localStorage.setItem('conso_fs_t_'+mois,String(Date.now()))}catch(e){}
+    var old={};(PV.data&&PV.data.jours||[]).forEach(function(j){old[j.d]=j.h43});
+    var h43=[],tot=0;
+    (r.data||[]).forEach(function(j){
+      if(j.date.slice(0,7)!==mois||!isNum(j.production_kWh))return;
+      var v=Math.round(j.production_kWh*100)/100;tot+=v;
+      if(old[j.date]!==v)h43.push([j.date,v]);
+    });
+    if(!h43.length){if(!auto)toast('FusionSolar : déjà à jour ('+fmt(tot,0)+' kWh sur le mois)');return}
+    return run('pvEnregistrer',{h43j:h43,source_h43:'FusionSolar'}).then(function(){
+      toast('FusionSolar : '+h43.length+' jour(s) mis à jour · '+fmt(tot,0)+' kWh sur le mois');
+      if(PV.mois===mois)return loadPV(mois);
+    });
+  }).catch(function(e){if(!auto||!/clé invalide/.test(e.message))toast(errMsg(e),true)}).then(fin,fin);
+}
+/* À l'ouverture d'un mois (en cours ou passé, depuis oct. 2026) : actualisation auto si clé connue et pas faite récemment */
+function pvFusionAuto(){
+  var m=PV.mois;if(!fsKey()||m<'2026-10'||m>pvYM(new Date())||PV.fsEnCours)return;
+  var t=0;try{t=+localStorage.getItem('conso_fs_t_'+m)||0}catch(e){}
+  if(Date.now()-t<FS_RECENT)return;
+  PV.fsEnCours=true;pvFusion(true).then(function(){PV.fsEnCours=false});
 }
 function renderPV(){
   var D=PV.data;
@@ -1335,7 +1381,7 @@ function pvPdfGen_(mode){
 (function(){
   $('pvPrev').onclick=function(){pvShift(-1)};$('pvNext').onclick=function(){pvShift(1)};
   $('pvMoisSel').onchange=function(){if(/^\d{4}-\d{2}$/.test(this.value))loadPV(this.value)};
-  $('pvBtnPdf').onclick=pvPdf;$('pvBtnJours').onclick=pvSaveJours;$('pvBtnMois').onclick=pvSaveMois;
+  $('pvBtnFs').onclick=function(){pvFusion(false)};$('pvBtnPdf').onclick=pvPdf;$('pvBtnJours').onclick=pvSaveJours;$('pvBtnMois').onclick=pvSaveMois;
   $('pvBtnInd').onclick=pvAddIndispo;$('pvBtnImport').onclick=pvImport;
   $('pvIndispo').addEventListener('click',function(e){
     var b=e.target.closest('button[data-del]');if(!b||!confirm('Supprimer cette indisponibilité ?'))return;
