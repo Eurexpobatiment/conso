@@ -31,8 +31,11 @@ script en version 58, bascule faite (installerFirebase). Le classeur n'est plus 
    Avant la bascule, `copierVersFirebase` peut être relancée : elle remplace ce qui est dans Firebase par le classeur.
 
 ## Bascule (quand la version Firebase est validée)
-1. Exécuter `installerFirebase` dans le script : Firebase devient la référence. Toutes les 10 minutes, et avant chaque
-   rapport PDF ou export CSV, le classeur est recopié depuis Firebase ; la météo, les DJU, Conso_Site et le PV sont republiés.
+1. Exécuter `installerFirebase` dans le script : Firebase devient la référence. Une fois par nuit vers 3 h (`copieNuitFirebase`),
+   et avant chaque rapport PDF ou export CSV, le classeur est recopié depuis Firebase ; toutes les 10 minutes (`majFirebase`),
+   la météo, les DJU, Conso_Site et le PV sont republiés (sans relire Firebase).
+   Depuis le 9 nov. 2026 : la copie du classeur ne se fait plus toutes les 10 minutes (≈ 17 000 lectures Firebase par jour,
+   un tiers du quota gratuit), mais une fois par nuit (≈ 120 lectures).
    À partir de là, ne plus rien modifier dans le classeur ni dans l'ancienne version (ce serait écrasé).
 2. Remplacer l'appli de la racine du dépôt par celle de `v2/`.
 Retour en arrière possible : `desinstallerFirebase` (le classeur redevient la référence).

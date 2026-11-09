@@ -73,25 +73,25 @@ function copierVersFirebase() {
 /** LA BASCULE : Firebase devient la référence, le classeur en est la copie. */
 function installerFirebase() {
   PropertiesService.getScriptProperties().setProperty('CONSO_FB_ACTIF', '1');
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'majFirebase') ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('majFirebase').timeBased().everyMinutes(10).create();
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (['majFirebase', 'copieNuitFirebase'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('majFirebase').timeBased().everyMinutes(10).create(); ScriptApp.newTrigger('copieNuitFirebase').timeBased().atHour(3).everyDays(1).create();
   majFirebase();
   console.log('Bascule faite : classeur recopié depuis Firebase toutes les 10 minutes, météo / Conso_Site / PV republiés.');
 }
 
 function desinstallerFirebase() {
   PropertiesService.getScriptProperties().deleteProperty('CONSO_FB_ACTIF');
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'majFirebase') ScriptApp.deleteTrigger(t); });
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (['majFirebase', 'copieNuitFirebase'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t); });
   console.log('Copie automatique arrêtée : le classeur redevient la référence.');
 }
 
 /** Lancée toutes les 10 minutes après la bascule */
 function majFirebase() {
   var tok = cfbToken_();
-  if (cfbActif_()) cfbTirer_(tok);
+  // copie du classeur : une fois par nuit à 3 h, via copieNuitFirebase, plus à chaque passage
   try { majElecGazParc_(); } catch (e) { console.warn('majElecGazParc_ : ' + e); }
   cfbPublier_(tok);
-}
+} function copieNuitFirebase() { if (cfbActif_()) cfbTirer_(cfbToken_()); }
 
 /** Appelée par l'appli (Réglages) : enregistre la clé Météo-France dans le classeur, jamais dans Firebase. */
 function fbCleMeteo(cle, code) {
