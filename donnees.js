@@ -48,10 +48,13 @@
   var demarrage = Promise.all([
     import('https://www.gstatic.com/firebasejs/' + FBV + '/firebase-app.js'),
     import('https://www.gstatic.com/firebasejs/' + FBV + '/firebase-auth.js'),
-    import('https://www.gstatic.com/firebasejs/' + FBV + '/firebase-firestore.js')
+    import('https://www.gstatic.com/firebasejs/' + FBV + '/firebase-firestore.js'),
+    /* App Check (Fraud Defense) : facultatif, l'appli continue sans s'il ne se charge pas */
+    Promise.race([import('https://www.gstatic.com/firebasejs/' + FBV + '/firebase-app-check.js'), wait(4000).then(function () { return null; })]).catch(function () { return null; })
   ]).then(function (m) {
     A = m[1]; F = m[2];
     var app = m[0].initializeApp(FIREBASE);
+    if (m[3]) try { m[3].initializeAppCheck(app, { provider: new m[3].ReCaptchaEnterpriseProvider('6Le3lBguAAAAAGb774RgCJp5Gd_jfG38Tks9out3'), isTokenAutoRefreshEnabled: true }); } catch (e) { console.warn('App Check :', e); }
     auth = A.getAuth(app);
     try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
     catch (e) { db = F.getFirestore(app); }
