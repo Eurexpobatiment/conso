@@ -1038,6 +1038,9 @@
     rapportSalonPdf: function (id, mode) { return mode === 'drive' ? FB.script('rapportSalonPdf', [id, mode]) : rapportSalon(id); },
     pvRapportPdf: function (mois, mode) { return mode === 'drive' ? FB.script('pvRapportPdf', [mois, mode]) : rapportPV(mois); },
     chEtatCharte: etatCharte,
+    // mise à jour météo du matin : faite par Firebase (Cloud Scheduler 8 h 17 → conso-quotidien), plus par un déclencheur du script
+    installerMajMeteoQuotidienne: function () { return 'Mise à jour météo quotidienne déjà assurée par Firebase (chaque matin vers 8 h 17).'; },
+    etatMajQuotidienne: function () { return true; },
     chImporterCharte: importerCharte
   };
   window.CONSO_RAPPORTS = { rapportSalon: rapportSalon, rapportPV: rapportPV, exportCsv: exportCsv, planSvg: planSvg_ };
