@@ -64,9 +64,30 @@
     ecouter();
   }).catch(function (e) { pretKo(new Error('Chargement de Firebase impossible (' + fbErr(e) + ')')); });
 
+  /* Écoute en direct qui ne lâche pas : après un refus passager (jeton de connexion expiré pendant que l'onglet
+     était en arrière-plan, réseau…) on renouvelle le jeton et on réécoute, de plus en plus espacé, et tout de suite
+     au retour sur l'onglet. L'erreur n'est signalée qu'au 3e échec d'affilée. */
+  function onSnap(ref, ...args) {
+    const opts = (args[0] && typeof args[0] === 'object') ? args.shift() : {};
+    const next = args[0], err = args[1] || (() => {});
+    let un = null, fini = false, n = 0, t = 0;
+    const go = () => {
+      if (fini) return;
+      un = F.onSnapshot(ref, opts, s => { n = 0; next(s); }, e => {
+        un = null; n++;
+        if ((e.code === 'permission-denied' || e.code === 'unauthenticated') && auth && auth.currentUser) auth.currentUser.getIdToken(true).catch(() => {});
+        if (n === 3) err(e);
+        t = setTimeout(go, Math.min(30000, 1000 * 2 ** Math.min(n, 5)));
+      });
+    };
+    const vis = () => { if (!document.hidden && !un && !fini) { clearTimeout(t); go(); } };
+    document.addEventListener('visibilitychange', vis);
+    go();
+    return () => { fini = true; clearTimeout(t); document.removeEventListener('visibilitychange', vis); if (un) un(); };
+  }
   function ecouter() {
     var ko = function (e) { pretKo(new Error('Lecture Firebase impossible : ' + fbErr(e))); };
-    F.onSnapshot(F.collection(db, 'ConsoConfig'), function (s) {
+    onSnap(F.collection(db, 'ConsoConfig'), function (s) {
       s.docs.forEach(function (d) {
         var x = d.data();
         if (d.id === 'params') D.params = x.p || {};
@@ -76,25 +97,25 @@
       });
       if (s.size || !s.metadata.fromCache) arrive('config');
     }, ko);
-    F.onSnapshot(F.collection(db, 'ConsoSalons'), function (s) {
+    onSnap(F.collection(db, 'ConsoSalons'), function (s) {
       D.salons = s.docs.map(function (d) { var o = d.data(); o.id = d.id; return o; });
       if (s.size || !s.metadata.fromCache) arrive('salons');
     }, ko);
-    F.onSnapshot(F.collection(db, 'ConsoReleves'), function (s) {
+    onSnap(F.collection(db, 'ConsoReleves'), function (s) {
       var r = {}; s.docs.forEach(function (d) { r[d.id] = d.data().l || {}; }); D.releves = r;
       if (s.size || !s.metadata.fromCache) arrive('releves');
     }, ko);
-    F.onSnapshot(F.doc(db, 'ConsoServeur', 'donnees'), function (s) {
+    onSnap(F.doc(db, 'ConsoServeur', 'donnees'), function (s) {
       if (s.exists()) { try { D.srv = JSON.parse(s.data().json || '{}'); } catch (e) { D.srv = {}; } }
       if (s.exists() || !s.metadata.fromCache) arrive('srv');
     }, ko);
     // Météo récupérée par la fonction Firebase (ou saisie dans l'appli) : complète / remplace celle du script
-    F.onSnapshot(F.collection(db, 'ConsoMeteo'), function (s) {
+    onSnap(F.collection(db, 'ConsoMeteo'), function (s) {
       var j = {}, etat = {};
       s.docs.forEach(function (d) { if (d.id === 'etat') etat = d.data(); else Object.assign(j, d.data().j || {}); });
       D.meteoFb = j; D.meteoEtat = etat;
     }, function (e) { console.warn('ConsoMeteo : ' + fbErr(e)); });
-    F.onSnapshot(F.doc(db, 'ConsoServeur', 'logo'), function (s) { if (s.exists()) D.logo = s.data().data || ''; if (s.exists() || !s.metadata.fromCache) arrive('logo'); }, function () { arrive('logo'); });
+    onSnap(F.doc(db, 'ConsoServeur', 'logo'), function (s) { if (s.exists()) D.logo = s.data().data || ''; if (s.exists() || !s.metadata.fromCache) arrive('logo'); }, function () { arrive('logo'); });
     // Températures des halls : appli Dalkia (même projet Firebase)
     var pts = null, seuils = {}, rel = null;
     function majTemp() {
@@ -113,12 +134,12 @@
       arrive('temp');
     }
     var tempKo = function (e) { D.temp = { err: 'Températures Firebase illisibles : ' + fbErr(e) }; arrive('temp'); };
-    F.onSnapshot(F.doc(db, 'TempReglages', 'points'), function (s) {
+    onSnap(F.doc(db, 'TempReglages', 'points'), function (s) {
       if (!s.exists()) { if (!s.metadata.fromCache) { D.temp = { err: 'Points de mesure des températures absents de Firebase.' }; arrive('temp'); } return; }
       try { pts = JSON.parse(s.data().json || '[]'); } catch (e) { pts = []; } majTemp();
     }, tempKo);
-    F.onSnapshot(F.doc(db, 'TempReglages', 'seuils'), function (s) { seuils = s.exists() ? s.data() : {}; majTemp(); }, function () {});
-    F.onSnapshot(F.collection(db, 'TempReleves'), function (s) {
+    onSnap(F.doc(db, 'TempReglages', 'seuils'), function (s) { seuils = s.exists() ? s.data() : {}; majTemp(); }, function () {});
+    onSnap(F.collection(db, 'TempReleves'), function (s) {
       rel = s.docs.map(function (d) { var o = d.data(); o.id = d.id; return o; }); majTemp();
     }, tempKo);
   }
