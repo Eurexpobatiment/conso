@@ -887,6 +887,10 @@
       return attendreImages(zone);
     }).then(function () {
       var cover = zone.querySelector('#rpCover'), body = zone.querySelector('#rpBody');
+      // le corps est mis dans sa « fenêtre » de page avant d'être mesuré (mêmes positions qu'au dessin)
+      var vue = document.createElement('div');
+      vue.style.cssText = 'position:relative;overflow:hidden;width:182mm;background:#fff';
+      zone.appendChild(vue); vue.appendChild(body);
       var cut = coupures(body), hPage = (297 - 10 - 12) * MM, pages = [], debut = 0;
       // découpage en pages : à la fin d'un bloc, jamais juste après un titre ; « brk » = nouvelle page
       while (debut < cut.hauteur - 2) {
@@ -900,11 +904,9 @@
         pages.push([debut, fin]); debut = fin;
       }
       // chaque page est dessinée à part (les grands canevas sont refusés sur iPhone)
-      var vue = document.createElement('div');
-      vue.style.cssText = 'position:relative;overflow:hidden;width:182mm;background:#fff';
-      zone.appendChild(vue);
-      body.style.position = 'absolute'; body.style.left = '0';
-      vue.appendChild(body);
+      vue.style.height = cut.hauteur + 'px';
+      body.style.position = 'absolute'; body.style.left = '0'; body.style.top = '0';
+      window._rpDbg = { pages: pages, cut: cut };
       var opt = { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false };
       var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
       return window.html2canvas(cover.firstChild, opt).then(function (cc) {
