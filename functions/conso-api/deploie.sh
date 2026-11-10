@@ -3,6 +3,11 @@
 set -e
 DOM=${1:-eu5.fusionsolar.huawei.com}
 gcloud config set project equipe-batiment >/dev/null 2>&1
+SA=$(gcloud projects describe equipe-batiment --format='value(projectNumber)')-compute@developer.gserviceaccount.com
+for s in meteo-cle fusionsolar-user fusionsolar-code; do
+  gcloud secrets add-iam-policy-binding $s --member=serviceAccount:$SA --role=roles/secretmanager.secretAccessor --quiet >/dev/null
+done
+echo OK-ACCES
 rm -rf ~/conso && git clone -q --depth 1 https://github.com/Eurexpobatiment/conso ~/conso && cd ~/conso/functions/conso-api
 gcloud functions deploy conso-api --gen2 --region=europe-west9 --runtime=nodejs22 --source=. --entry-point=api --trigger-http --allow-unauthenticated \
   --memory=256Mi --max-instances=3 --timeout=120s \
