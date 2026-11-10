@@ -702,11 +702,16 @@
   function pvMWh_(kwh, d) { return kwh === null || kwh === undefined ? '—' : pvFr_(kwh / 1000, d === undefined ? 1 : d); }
   function pvHM_(h) { if (!h || h <= 0) return '—'; var m = Math.round(h * 60); return Math.floor(m / 60) + ' h ' + pvPad_(m % 60); }
   var pvEsc_ = h_;
+  /* période du rapport : mois entier ou période libre (R.d0 → R.d1) */
+  function pvBornes_(R) { return R.d0 ? [R.d0, R.d1] : [R.mois + '-01', R.mois + '-' + pvPad_(R.nbJ)]; }
+  function pvSur_(R) { return R.d0 ? 'la période' : 'le mois'; }
+  function pvDu_(R) { return R.d0 ? 'de la période' : 'du mois'; }
 
+  function pvJl_(R, j, i) { var d = +j.d.slice(8); return R.d0 && (d === 1 || i === 0) ? d + '/' + j.d.slice(5, 7) : String(d); }
   function pvSiteMois_(R, D) {
     if (!(D.srv && D.srv.siteOk)) return null;
-    var site = {};
-    ((D.srv && D.srv.site) || []).forEach(function (r) { if (r.d && r.d.slice(0, 7) === R.mois) site[r.d] = { e: r.e == null ? null : r.e, g: r.g == null ? null : r.g }; });
+    var site = {}, B = pvBornes_(R);
+    ((D.srv && D.srv.site) || []).forEach(function (r) { if (r.d && r.d >= B[0] && r.d <= B[1]) site[r.d] = { e: r.e == null ? null : r.e, g: r.g == null ? null : r.g }; });
     var S = { elec: 0, gaz: 0, jE: 0, jG: 0, jours: [] };
     R.jours.forEach(function (j) {
       var s = site[j.d] || {}, pv = (j.park || 0) + (j.h43 || 0);
@@ -721,7 +726,7 @@
     return S;
   }
   function pvEvenementsMois_(R, X) {
-    var d0 = R.mois + '-01', d1 = R.mois + '-' + pvPad_(R.nbJ);
+    var B = pvBornes_(R), d0 = B[0], d1 = B[1];
     var calc = X.tous.filter(function (s) { return s.debut && s.fin && s.debut <= d1 && s.fin >= d0; });
     var jours = {};
     calc.forEach(function (s) {
@@ -740,13 +745,13 @@
     }
     if (E && E.liste.length) {
       var n = Object.keys(E.jours).length;
-      p.push(E.liste.length + ' évènement' + (E.liste.length > 1 ? 's' : '') + ' sur ' + n + ' jour' + (n > 1 ? 's' : '') + ' du mois.');
-    } else if (E) p.push('Aucun évènement dans le mois.');
+      p.push(E.liste.length + ' évènement' + (E.liste.length > 1 ? 's' : '') + ' sur ' + n + ' jour' + (n > 1 ? 's' : '') + ' ' + pvDu_(R) + '.');
+    } else if (E) p.push('Aucun évènement sur ' + pvSur_(R) + '.');
     return p.join(' ');
   }
   function pvSiteHtml_(R, S, E) {
     var h = '<h2 class="brk">Consommation du site</h2>';
-    if (!S) h += '<p class="muted">Pas de relevé de consommation du site (onglet Conso_Site) pour ce mois.</p>';
+    if (!S) h += '<p class="muted">Pas de relevé de consommation du site (onglet Conso_Site) pour ' + (R.d0 ? 'cette période' : 'ce mois') + '.</p>';
     else {
       h += chTuiles_([
         [pvFr_(S.jE ? S.elec : null, 1) + ' MWh', 'Élec soutirée au réseau (Enedis)'],
@@ -764,14 +769,14 @@
         if (a.n && b.n) h += '<div class="syn"><p>Élec soutirée en moyenne <b>' + pvFr_(a.e / a.n, 2) + ' MWh/jour</b> les jours d\'évènement (' + a.n + ' j) contre <b>' +
           pvFr_(b.e / b.n, 2) + ' MWh/jour</b> les autres jours (' + b.n + ' j).</p></div>';
       }
-      if (S.jE) h += img_(colonnes({ labels: S.jours.map(function (j) { return String(+j.d.slice(8)) + (E && E.jours[j.d] ? '•' : ''); }), stacked: true, legend: true,
+      if (S.jE) h += img_(colonnes({ labels: S.jours.map(function (j, i) { return pvJl_(R, j, i) + (E && E.jours[j.d] ? '•' : ''); }), stacked: true, legend: true,
         series: [{ name: 'Élec soutirée réseau', color: CH.ardoise, values: S.jours.map(function (j) { return j.e || 0; }) },
           { name: 'PV autoconsommé', color: CH.vert, values: S.jours.map(function (j) { return j.pv || 0; }) }],
         title: 'Consommation élec du site par jour (MWh) — • jour d\'évènement', ytitle: 'MWh / jour', w: 1000, h: 320 }), 680);
       if (S.jE < R.nbJ) h += '<div class="note">Consommation du site : ' + (R.nbJ - S.jE) + ' jour(s) sans relevé dans Conso_Site.</div>';
     }
-    h += '<h2>Évènements du mois</h2>';
-    if (!E || !E.liste.length) h += '<p class="muted">Aucun évènement dans le mois.</p>';
+    h += '<h2>Évènements ' + pvDu_(R) + '</h2>';
+    if (!E || !E.liste.length) h += '<p class="muted">Aucun évènement sur ' + pvSur_(R) + '.</p>';
     else {
       h += '<table><tr><th class="l">Évènement</th><th class="l">Dates</th><th>Jours</th><th>Surface (m²)</th><th>Élec halls (MWh)</th><th>dont CVC</th><th>Élec parc (MWh)</th><th>Gaz (MWh)</th><th>kWh/m²/DJU</th></tr>';
       E.liste.forEach(function (s) {
@@ -780,7 +785,7 @@
           '</td><td>' + pvFr_(o.surfaceLouee || null, 0) + '</td><td>' + pvFr_(o.lignesSaisies ? o.elec : null, 1) + '</td><td>' + pvFr_(o.lignesSaisies ? o.cvc : null, 1) +
           '</td><td>' + pvFr_(s.elecParc === '' ? null : s.elecParc, 1) + '</td><td>' + pvFr_(s.gaz === '' ? null : s.gaz, 1) + '</td><td>' + (typeof o.kwhM2DJU === 'number' ? pvFr_(o.kwhM2DJU, 3) : 'n.s.') + '</td></tr>';
       });
-      h += '</table><p class="muted">Jours : jours de l\'évènement dans le mois (/ durée totale s\'il déborde sur un autre mois). Élec halls et CVC : index des TGBT relevés avant / après l\'évènement. ' +
+      h += '</table><p class="muted">Jours : jours de l\'évènement ' + (R.d0 ? 'dans la période' : 'dans le mois') + ' (/ durée totale s\'il en déborde). Élec halls et CVC : index des TGBT relevés avant / après l\'évènement. ' +
         'Élec parc et gaz : compteurs Enedis et GRDF du site sur les jours de l\'évènement (comptés pour chaque évènement s\'ils se chevauchent).</p>';
     }
     return h;
@@ -793,7 +798,7 @@
     try { E = pvEvenementsMois_(R, X); } catch (e) { console.warn(e); }
     var cover = chCouverture_('Rapport de production photovoltaïque', titre, ['Centrale d\'injection · PV des parkings · PV du hall 4.3']);
     var h = '<h1>Production photovoltaïque</h1><div class="sub">' + pvEsc_(titre) + '</div>';
-    var phr = 'En ' + R.label + ', la centrale a injecté <b>' + pvMWh_(R.jInj ? R.inj : null) + ' MWh</b> sur le réseau';
+    var phr = (R.d0 ? 'Du ' + R.label.replace(/^du /, '') : 'En ' + R.label) + ', la centrale a injecté <b>' + pvMWh_(R.jInj ? R.inj : null) + ' MWh</b> sur le réseau';
     phr += R.auto !== null ? ' et le site a autoconsommé <b>' + pvMWh_(R.auto) + ' MWh</b> de production PV (parkings ' + pvMWh_(R.jPark ? R.park : null) + ' MWh, hall 4.3 ' + pvMWh_(R.h43) + ' MWh).' : '.';
     phr += R.nInd ? ' ' + R.nInd + ' indisponibilité' + (R.nInd > 1 ? 's ont' : ' a') + ' été relevée' + (R.nInd > 1 ? 's' : '') + ' pour <b>' + pvHM_(R.hInd) + '</b> cumulées sur ' + R.jInd + ' jour' + (R.jInd > 1 ? 's' : '') + '.' : ' Aucune indisponibilité n\'a été relevée.';
     var ps = pvSitePhrase_(R, S, E);
@@ -814,7 +819,7 @@
       [pvHM_(R.hInd), 'Indisponibilités · ' + R.nInd + ' évènement' + (R.nInd > 1 ? 's' : '')],
       [R.jInd + ' j', 'Jours concernés par une indisponibilité']
     ], 4);
-    var jl = R.jours.map(function (j) { return String(+j.d.slice(8)); });
+    var jl = R.jours.map(function (j, i) { return pvJl_(R, j, i); });
     h += '<h2>Production journalière</h2>';
     if (R.jInj) h += img_(colonnes({ labels: jl, series: [{ name: 'Injection réseau (MWh)', color: CH.fonce, values: R.jours.map(function (j) { return Math.round(j.inj || 0) / 1000; }) }],
       title: 'Injection réseau — postes PTR1 à PTR4 (MWh / jour)', ytitle: 'MWh / jour', w: 1000, h: 300 }), 680);
@@ -823,14 +828,14 @@
     if (R.jH43) h += img_(colonnes({ labels: jl, series: [{ name: 'PV hall 4.3 (kWh)', color: CH.vertClair, values: R.jours.map(function (j) { return Math.round(j.h43 || 0); }) }],
       title: 'PV hall 4.3 autoconsommé (kWh / jour)', ytitle: 'kWh / jour', w: 1000, h: 260 }), 680);
     h += '<h2 class="brk">Indisponibilités (Agregio)</h2>';
-    if (!R.ind.length) h += '<p class="muted">Aucune indisponibilité relevée sur le mois.</p>';
+    if (!R.ind.length) h += '<p class="muted">Aucune indisponibilité relevée sur ' + pvSur_(R) + '.</p>';
     else {
       h += '<table><tr><th class="l">Début</th><th class="l">Fin</th><th>Durée</th><th class="l">Type</th><th class="l">Source</th></tr>';
       R.ind.forEach(function (x) {
         h += '<tr><td class="l">' + pvEsc_(x.debut) + '</td><td class="l">' + pvEsc_(x.fin) + '</td><td>' + pvHM_(x.h) +
           '</td><td class="l">' + pvEsc_(x.type) + '</td><td class="l">' + pvEsc_(x.source) + '</td></tr>';
       });
-      h += '<tr class="tot"><td class="l" colspan="2">Total sur le mois</td><td>' + pvHM_(R.hInd) + '</td><td colspan="2"></td></tr></table>';
+      h += '<tr class="tot"><td class="l" colspan="2">Total sur ' + pvSur_(R) + '</td><td>' + pvHM_(R.hInd) + '</td><td colspan="2"></td></tr></table>';
       h += '<p class="muted">Les rampes de montée/descente des groupes A et B ne sont pas comptées par Agregio.</p>';
     }
     if (R.comm) h += '<h2>Commentaire</h2><p>' + pvEsc_(R.comm).replace(/\n/g, '<br>') + '</p>';
@@ -842,7 +847,7 @@
     var T = { inj: 0, park: 0, h43: 0, auto: 0, h: 0 };
     R.annee.forEach(function (a) {
       T.inj += a.inj || 0; T.park += a.park || 0; T.h43 += a.h43 || 0; T.auto += a.auto || 0; T.h += a.hInd || 0;
-      h += '<tr' + (a.mois === R.mois ? ' class="hl"' : '') + '><td class="l">' + a.label + '</td><td>' + pvMWh_(a.inj) + '</td><td>' + pvMWh_(a.park) + '</td><td>' +
+      h += '<tr' + ((R.d0 ? a.mois >= R.d0.slice(0, 7) && a.mois <= R.d1.slice(0, 7) : a.mois === R.mois) ? ' class="hl"' : '') + '><td class="l">' + a.label + '</td><td>' + pvMWh_(a.inj) + '</td><td>' + pvMWh_(a.park) + '</td><td>' +
         pvMWh_(a.h43) + '</td><td>' + pvMWh_(a.auto) + '</td><td>' + pvHM_(a.hInd) + '</td></tr>';
     });
     h += '<tr class="tot"><td class="l">Total</td><td>' + pvMWh_(T.inj) + '</td><td>' + pvMWh_(T.park) + '</td><td>' + pvMWh_(T.h43) +
@@ -864,6 +869,16 @@
       var R = r[2], D = FB.D, X = M.tousCalcules(D);
       IMGS = [];
       return fairePdf(pvRapportHtml_(R, X, D), 'Rapport PV ' + R.mois + '.pdf');
+    });
+  }
+
+  /** Rapport PV sur une période libre : R = données déjà regroupées par l'appli (jours du … au …) */
+  function rapportPVPer(R) {
+    return Promise.all([FB.prets(), lireCharte()]).then(function () {
+      var D = FB.D, X = M.tousCalcules(D);
+      IMGS = [];
+      var nom = 'Rapport PV du ' + R.d0 + ' au ' + R.d1 + '.pdf';
+      return fairePdf(pvRapportHtml_(R, X, D), nom);
     });
   }
 
@@ -1037,6 +1052,7 @@
     exportResumeCsv: exportCsv,
     rapportSalonPdf: function (id, mode) { return mode === 'drive' ? FB.script('rapportSalonPdf', [id, mode]) : rapportSalon(id); },
     pvRapportPdf: function (mois, mode) { return mode === 'drive' ? FB.script('pvRapportPdf', [mois, mode]) : rapportPV(mois); },
+    pvRapportPdfPer: function (R) { return rapportPVPer(R); },
     chEtatCharte: etatCharte,
     // mise à jour météo du matin : faite par Firebase (Cloud Scheduler 8 h 17 → conso-quotidien), plus par un déclencheur du script
     installerMajMeteoQuotidienne: function () { return 'Mise à jour météo quotidienne déjà assurée par Firebase (chaque matin vers 8 h 17).'; },

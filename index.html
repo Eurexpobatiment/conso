@@ -1309,7 +1309,6 @@ function pvSetMode(per){
   PV.periode=!!per;$('pvMode').value=per?'p':'m';
   $('pvBlocM').style.display=per?'none':'';$('pvBlocP').style.display=per?'':'none';
   $('pvBtnFs').disabled=per;$('pvBtnFs').title=per?'Disponible en affichage par mois':'Récupérer la production PV du hall 4.3 du mois affiché sur FusionSolar';
-  $('pvBtnPdf').disabled=per;$('pvBtnPdf').title=per?'Le rapport PDF est mensuel : repasser en affichage par mois':'';
   try{localStorage.setItem('conso_pv_mode',per?'p':'m')}catch(e){}
 }
 function pvJourInd(x){ // date (AAAA-MM-JJ) du début d'une indisponibilité, quel que soit son format
@@ -1328,7 +1327,7 @@ function loadPVPer(){
   $('pvKpis').innerHTML='<div class="muted">Chargement de '+mois.length+' mois…</div>';
   return Promise.all(mois.map(function(m){return run('pvMois',m)})).then(function(L){
     if(!PV.periode||PV.du!==du||PV.au!==au)return;
-    var D={mois:mois[mois.length-1],label:'du '+pvFr(du)+' au '+pvFr(au),jours:[],ind:[],annee:L[L.length-1].annee,
+    var D={d0:du,d1:au,mois:mois[mois.length-1],label:'du '+pvFr(du)+' au '+pvFr(au),jours:[],ind:[],annee:L[L.length-1].annee,
       inj:0,park:0,h43:0,jInj:0,jPark:0,jH43:0,hInd:0,jInd:0,nInd:0,comm:''};
     L.forEach(function(M){
       (M.jours||[]).forEach(function(j){
@@ -1445,16 +1444,16 @@ function pvImport(){
 function pvPdf(){
   $('pvPdfMsg').innerHTML='<div class="banner info">Rapport PDF : '
     +'<button type="button" class="btn sm" id="pvDl">Enregistrer sur l\'ordinateur…</button> '
-    +'<button type="button" class="btn sm" id="pvDrive">Enregistrer dans Drive (ancien script)</button> '
+    +(PV.periode?'':'<button type="button" class="btn sm" id="pvDrive">Enregistrer dans Drive (ancien script)</button> ')
     +'<button type="button" class="btn sm" id="pvNo">Annuler</button></div>';
   $('pvNo').onclick=function(){$('pvPdfMsg').innerHTML='';};
   $('pvDl').onclick=function(){pvPdfGen_('fichier');};
-  $('pvDrive').onclick=function(){pvPdfGen_('drive');};
+  if($('pvDrive'))$('pvDrive').onclick=function(){pvPdfGen_('drive');};
 }
 function pvPdfGen_(mode){
   var b=$('pvBtnPdf');b.disabled=true;b.textContent='Génération…';
   $('pvPdfMsg').innerHTML='<div class="banner info">Génération du rapport PDF en cours (20 à 40 s, sur cet appareil)…</div>';
-  run('pvRapportPdf',PV.mois,mode).then(function(r){
+  (PV.periode?run('pvRapportPdfPer',PV.data):run('pvRapportPdf',PV.mois,mode)).then(function(r){
     if(r.url){
       $('pvPdfMsg').innerHTML='<div class="banner info">Rapport enregistré dans le dossier Drive « '+esc(r.dossier)+' » : <a href="'+esc(r.url)+'" target="_blank" rel="noopener"><b>ouvrir '+esc(r.nom)+'</b></a></div>';
       return;
