@@ -915,8 +915,12 @@
         cover.remove();
         return pages.reduce(function (p, pg, i) {
           return p.then(function () {
-            vue.style.height = (pg[1] - pg[0]) + 'px'; body.style.top = (-pg[0]) + 'px';
-            return window.html2canvas(vue, opt).then(function (c) {
+            // une fenêtre neuve par page (html2canvas garde sinon la taille de la précédente)
+            var v = vue.cloneNode(true);
+            v.style.display = 'block'; v.style.height = (pg[1] - pg[0]) + 'px'; v.firstChild.style.top = (-pg[0]) + 'px';
+            vue.style.display = 'none'; zone.appendChild(v);
+            return window.html2canvas(v, opt).then(function (c) {
+              v.remove();
               pdf.addPage();
               pdf.setFillColor(0, 171, 137); pdf.rect(0, 10, 7, 297 - 22, 'F');
               pdf.addImage(c.toDataURL('image/jpeg', 0.88), 'JPEG', 16, 10, 182, (pg[1] - pg[0]) / MM);
