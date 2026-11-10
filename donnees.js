@@ -62,6 +62,7 @@
     try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
     catch (e) { db = F.getFirestore(app); }
     ecouter();
+    A.onAuthStateChanged(auth, majLecture);
   }).catch(function (e) { pretKo(new Error('Chargement de Firebase impossible (' + fbErr(e) + ')')); });
 
   /* Écoute en direct qui ne lâche pas : après un refus passager (jeton de connexion expiré pendant que l'onglet
@@ -150,6 +151,21 @@
         if (!D.salons.length && !D.lignes.length) throw new Error('Aucune donnée dans Firebase : la copie du classeur (copierVersFirebase) n\'est pas encore faite.');
       });
   }
+  /* ---------- consultation seule ----------
+     Compte de l'appli Équipe (ou des Demandes de travaux) : consultation et rapports seulement, sauf si le code des
+     réglages a été donné sur cet appareil (le responsable). Appareil sans compte (connexion anonyme) : comme avant.
+     Les règles Firestore appliquent la même chose côté serveur. */
+  var lecture = false;
+  function majLecture() {
+    var u = auth && auth.currentUser;
+    lecture = !!(u && !u.isAnonymous && LS.getItem('conso_reglages_uid') !== u.uid);
+    if (document.body) document.body.classList.toggle('ro', lecture);
+    else document.addEventListener('DOMContentLoaded', function () { document.body.classList.toggle('ro', lecture); });
+  }
+  var MODIFS = ['saveReleve', 'setDatesReleve', 'saveSalon', 'deleteSalon', 'saveParams', 'saveHalls', 'saveCorr', 'saveLignes',
+    'saveMeteoJour', 'majMeteo', 'installerMajMeteoQuotidienne', 'pvEnregistrer', 'pvSupprimerIndispo', 'chImporterCharte', 'fbCleMeteo'];
+  function refusLecture() { return Promise.reject(new Error('Consultation seule : seul le responsable peut modifier cette appli.')); }
+
   function ensureAuth() {
     return demarrage.then(function () { return auth.authStateReady(); }).then(function () {
       if (!auth.currentUser) return withTimeout(A.signInAnonymously(auth), 15000, 'Pas de connexion : la première saisie sur cet appareil demande internet.');
@@ -169,7 +185,7 @@
       if (code === null) throw new Error('Modification annulée.');
       code = code.trim();
       return withTimeout(F.setDoc(F.doc(db, 'ConsoSessions', uid), { code: code, at: new Date().toISOString() }), 15000, 'Pas de connexion au serveur.')
-        .then(function () { LS.setItem('conso_reglages_uid', uid); LS.setItem('conso_code', code); },
+        .then(function () { LS.setItem('conso_reglages_uid', uid); LS.setItem('conso_code', code); majLecture(); },
           function (e) { if (e && e.code === 'permission-denied') throw new Error('Code des réglages incorrect.'); throw new Error(fbErr(e)); });
     });
   }
@@ -217,6 +233,7 @@
   /* ---------- fonction Firebase conso-api (Météo-France, FusionSolar) ---------- */
   /** Appel de la fonction ; erreur.absente = fonction pas (encore) déployée ou injoignable → repli sur le script */
   function fonction(corps) {
+    if (lecture) return refusLecture();
     return session(false).then(function () {
       return Promise.all([auth.currentUser.getIdToken(),
         acInst && AC ? AC.getToken(acInst, false).then(function (t) { return t.token; }, function () { return ''; }) : '']);
@@ -362,6 +379,7 @@
   };
 
   function appel(fn, args) {
+    if (lecture && MODIFS.indexOf(fn) >= 0) return refusLecture();
     var EXT = window.CONSO_EXT || {};
     if (EXT[fn]) return Promise.resolve().then(function () { return EXT[fn].apply(null, args); });
     if (LOCAL[fn]) return Promise.resolve().then(function () { return LOCAL[fn].apply(null, args); });
@@ -387,6 +405,9 @@
     lireDoc: function (coll, id) {
       return demarrage.then(function () { return F.getDoc(F.doc(db, coll, id)); }).then(function (s) { return s.exists() ? s.data() : null; });
     },
-    ecrireDoc: function (coll, id, data) { return reglage(function () { return F.setDoc(F.doc(db, coll, id), data); }); }
+    lectureSeule: function () { return lecture; },
+    /** Le responsable débloque la modification sur cet appareil avec le code des réglages */
+    deverrouiller: function () { return session(true).then(function () { majLecture(); return !lecture; }); },
+    ecrireDoc: function (coll, id, data) { if (lecture) return refusLecture(); return reglage(function () { return F.setDoc(F.doc(db, coll, id), data); }); }
   };
 })();

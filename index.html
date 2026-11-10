@@ -155,6 +155,17 @@ details.tg[open] summary .chev{transform:rotate(90deg)}
 .plan .pl.on{fill:#fff}
 .plan .cap{font-size:12px;color:var(--muted);margin:2px 4px 0}
 .cpt input.prop{font-style:italic;color:var(--muted)}
+/* Consultation seule (compte de l'appli Équipe) : consultation et rapports PDF, aucune modification */
+#btnRo{display:none}
+body.ro #btnRo{display:inline-flex}
+body.ro nav.tabs button[data-v=saisie],body.ro nav.tabs button[data-v=reglages],
+body.ro #btnNewSalon,body.ro #btnGoSaisie,body.ro #btnDelSalon,body.ro #btnSaveSalon,body.ro #btnUnfreeze,
+body.ro #btnMeteo,body.ro #btnTrigger,body.ro #v-meteo .card:has(#btnMeteoJour),
+body.ro #pvBtnFs,body.ro #pvIndispo button[data-del],body.ro #v-pv details:has(#pvBtnInd),
+body.ro #v-pv .row:has(#pvBtnJours),body.ro #v-pv .card:has(#pvBtnImport){display:none!important}
+body.ro #pSalon .form,body.ro #pvJours{pointer-events:none}
+body.ro #pSalon .form :is(input,select,textarea),body.ro #pvJours input{background:transparent;border-color:transparent}
+body.ro #pSalon .form .cap{display:none}
 </style>
 </head>
 <body>
@@ -163,6 +174,7 @@ details.tg[open] summary .chev{transform:rotate(90deg)}
 <header>
   <img class="logo" id="hdrLogo" alt="GL events Lyon | Eurexpo Lyon" style="display:none">
   <h1>Consommations Halls <span class="sub" id="hdrYear"></span></h1>
+  <button class="btn sm" id="btnRo" title="Consultation et rapports PDF uniquement. Le responsable peut débloquer la modification avec le code des réglages.">🔒 Consultation</button>
   <button class="btn sm" id="btnReload" title="Recharger">↻</button>
 </header>
 
@@ -537,8 +549,13 @@ var TABS=[['dash','Tableau','<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],['s
   nav.innerHTML=TABS.map(function(t){return '<button data-v="'+t[0]+'"><svg viewBox="0 0 24 24">'+t[2]+'</svg>'+t[1]+'</button>'}).join('');
   document.body.appendChild(nav);
   nav.addEventListener('click',function(e){var b=e.target.closest('button');if(b)go(b.dataset.v)});
+  $('btnRo').onclick=function(){
+    if(!confirm('Cette appli est en consultation seule (rapports PDF possibles).\n\nResponsable : débloquer la modification sur cet appareil avec le code des réglages ?'))return;
+    CONSO_FB.deverrouiller().then(function(ok){if(ok)toast('Modification débloquée sur cet appareil')}).catch(function(e){toast(errMsg(e),1)});
+  };
 })();
 function go(v){
+  if(document.body.classList.contains('ro')&&(v==='saisie'||v==='reglages'))v='dash';
   document.querySelectorAll('.view').forEach(function(x){x.classList.toggle('on',x.id==='v-'+v)});
   document.querySelectorAll('nav.tabs button').forEach(function(x){x.classList.toggle('on',x.dataset.v===v)});
   window.scrollTo(0,0);
@@ -1245,6 +1262,7 @@ function fsAppel(mois,auto){
 }
 function pvFusion(auto){
   var mois=PV.mois;
+  if(window.CONSO_FB&&CONSO_FB.lectureSeule())return Promise.resolve(); // consultation seule : pas d'appel FusionSolar
   if(auto&&!fsKey()&&!localStorage.getItem('conso_reglages_uid'))return Promise.resolve(); // pas de demande de code en automatique
   var b=$('pvBtnFs');b.disabled=true;b.textContent='FusionSolar…';
   var fin=function(){b.disabled=false;b.textContent='Actualiser FusionSolar'};

@@ -12,6 +12,12 @@
         && get(/databases/$(db)/documents/ConsoSessions/$(request.auth.uid)).data.code == cSecret();
     }
 
+    // Saisie (salons, index, météo) : appareil sans compte (connexion anonyme, comme avant) ou appareil qui a donné le code.
+    // Les comptes de l'appli Équipe / Demandes de travaux (adresse e-mail) sont en consultation seule.
+    function cEdit() {
+      return request.auth != null && (request.auth.token.firebase.sign_in_provider == 'anonymous' || cSession());
+    }
+
     // Réglages : params, halls, lignes, corr (code des réglages)
     match /ConsoConfig/{id} {
       allow read: if true;
@@ -26,16 +32,16 @@
     // Salons (un document par salon) et index (un document par salon, lignes dans le champ l)
     match /ConsoSalons/{id} {
       allow read: if true;
-      allow create, update: if request.auth != null && id.size() <= 20 && request.resource.data.id == id
+      allow create, update: if cEdit() && id.size() <= 20 && request.resource.data.id == id
         && request.resource.data.keys().hasOnly(['id', 'salon', 'debut', 'fin', 'confort', 'halls', 'surface', 'elecParc', 'pv', 'gaz',
           'djuForces', 'elecMontage', 'joursMontage', 'dateAvant', 'dateApres', 'fige', 'fElec', 'fCVC', 'fFM', 'fECL', 'notes']);
-      allow delete: if request.auth != null;
+      allow delete: if cEdit();
     }
     match /ConsoReleves/{id} {
       allow read: if true;
-      allow create, update: if request.auth != null && id.size() <= 20
+      allow create, update: if cEdit() && id.size() <= 20
         && request.resource.data.keys().hasOnly(['l']) && request.resource.data.l is map && request.resource.data.l.size() <= 1000;
-      allow delete: if request.auth != null;
+      allow delete: if cEdit();
     }
 
     // Données publiées par le script Google (météo, DJU, Conso_Site, PV, logo) ; charte = photo et logo des rapports PDF (appli)
@@ -48,7 +54,7 @@
     // ConsoMeteo/etat écrit par la fonction seulement
     match /ConsoMeteo/{id} {
       allow read: if true;
-      allow create, update: if request.auth != null && id.matches('^[0-9]{4}$')
+      allow create, update: if cEdit() && id.matches('^[0-9]{4}$')
         && request.resource.data.keys().hasOnly(['j']) && request.resource.data.j is map;
     }
 
