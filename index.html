@@ -1222,7 +1222,7 @@ function loadPV(m){
   $('pvKpis').innerHTML='<div class="muted">Chargement…</div>';
   return run('pvMois',PV.mois).then(function(d){PV.data=d;renderPV();pvFusionAuto()}).catch(function(e){$('pvKpis').innerHTML='';toast(errMsg(e),true)});
 }
-/* ---- FusionSolar (PV hall 4.3) : relais Google Apps Script « Relais FusionSolar PV 4.3 » ---- */
+/* ---- FusionSolar (PV hall 4.3) : fonction Firebase conso-api (ancien relais Google en secours) ---- */
 var FS_URL='https://script.google.com/macros/s/AKfycbyhoHfIh_EbvBNRNSKtpwymk4KPOA7EqEl2FOnyH0zhhVwNQiBzHMtQJKcPAb_xUmNc/exec';
 var FS_RECENT=6*3600*1000; // actualisation automatique au plus toutes les 6 h par mois
 function fsKey(){try{return localStorage.getItem('conso_fs_key')||''}catch(e){return ''}}
@@ -1234,12 +1234,22 @@ function fsAskKey(then){
   $('pvFsNo').onclick=function(){$('pvFsMsg').innerHTML=''};
   $('pvFsOk').onclick=function(){var k=$('pvFsKey').value.trim();if(!k)return;try{localStorage.setItem('conso_fs_key',k)}catch(e){}$('pvFsMsg').innerHTML='';then()};
 }
+/* Fonction Firebase conso-api d'abord ; ancien relais Google (clé RELAY_KEY) seulement si elle n'est pas déployée */
+function fsAppel(mois,auto){
+  return CONSO_FB.fusionsolar(mois+'-15').then(function(d){return {ok:true,data:d}},function(e){
+    if(!e.absente)return {ok:false,erreur:e.message};
+    var k=fsKey();
+    if(!k){if(!auto)fsAskKey(function(){pvFusion(false)});return null}
+    return fetch(FS_URL+'?key='+encodeURIComponent(k)+'&action=jour&date='+mois+'-15').then(function(r){return r.json()});
+  });
+}
 function pvFusion(auto){
-  var k=fsKey(),mois=PV.mois;
-  if(!k){if(!auto)fsAskKey(function(){pvFusion(false)});return Promise.resolve()}
+  var mois=PV.mois;
+  if(auto&&!fsKey()&&!localStorage.getItem('conso_reglages_uid'))return Promise.resolve(); // pas de demande de code en automatique
   var b=$('pvBtnFs');b.disabled=true;b.textContent='FusionSolar…';
   var fin=function(){b.disabled=false;b.textContent='Actualiser FusionSolar'};
-  return fetch(FS_URL+'?key='+encodeURIComponent(k)+'&action=jour&date='+mois+'-15').then(function(r){return r.json()}).then(function(r){
+  return fsAppel(mois,auto).then(function(r){
+    if(!r)return;
     if(!r.ok){
       if(/clé invalide/.test(r.erreur||'')){try{localStorage.removeItem('conso_fs_key')}catch(e){}if(!auto)fsAskKey(function(){pvFusion(false)})}
       throw new Error('FusionSolar : '+(r.erreur||'erreur'));
@@ -1261,7 +1271,7 @@ function pvFusion(auto){
 }
 /* À l'ouverture d'un mois (en cours ou passé, depuis oct. 2026) : actualisation auto si clé connue et pas faite récemment */
 function pvFusionAuto(){
-  var m=PV.mois;if(!fsKey()||m<'2026-10'||m>pvYM(new Date())||PV.fsEnCours)return;
+  var m=PV.mois;if((!fsKey()&&!localStorage.getItem('conso_reglages_uid'))||m<'2026-10'||m>pvYM(new Date())||PV.fsEnCours)return;
   var t=0;try{t=+localStorage.getItem('conso_fs_t_'+m)||0}catch(e){}
   if(Date.now()-t<FS_RECENT)return;
   PV.fsEnCours=true;pvFusion(true).then(function(){PV.fsEnCours=false});

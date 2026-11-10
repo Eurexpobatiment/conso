@@ -67,7 +67,7 @@
       confortMin: num_(p.ConfortMin), confortMax: num_(p.ConfortMax),
       meteoStation: String(p.MeteoStation || '69029001'),
       tempSheetId: String(p.TempSheetId || '').trim(),
-      meteoMaj: String(s.meteoMaj || ''),
+      meteoMaj: (function () { var a = String(s.meteoMaj || ''), b = String((D.meteoEtat && D.meteoEtat.maj) || ''); return b > a ? b : a; })(),
       meteoCleOk: !!s.meteoCleOk
     };
   }
@@ -125,7 +125,8 @@
     return out;
   }
   function readMeteo(D) {
-    var m = {}, src = (D.srv && D.srv.meteo) || {};
+    // météo du script (classeur), complétée / remplacée par celle de Firebase (fonction conso-api ou saisie dans l'appli)
+    var m = {}, src = Object.assign({}, (D.srv && D.srv.meteo) || {}, D.meteoFb || {});
     Object.keys(src).forEach(function (d) {
       var r = src[d], tx = num_(r.tx), tn = num_(r.tn);
       if (d && tx !== '' && tn !== '') m[d] = { tx: tx, tn: tn, src: String(r.src || '') };

@@ -63,3 +63,9 @@ Fichier `rapports.js` (racine du dépôt) : plus besoin du script Google pour
 - « Enregistrer dans Drive (ancien script) » passe encore par le script Google, en secours.
 
 Reste au script : météo Météo-France (clé), DJU historiques, Conso_Site, données PV (saisie / import / FusionSolar), onglet Eau.
+
+## Appels d'API par fonction Firebase (10 nov. 2026)
+`functions/conso-api` (voir son LISEZMOI) : Météo-France (bouton + chaque matin) et FusionSolar passent par la fonction
+Firebase `conso-api` (Paris), clés dans Secret Manager. Météo dans `ConsoMeteo/{année}`, fusionnée par l'appli avec celle
+du classeur (Firebase l'emporte) ; saisie manuelle d'un jour dans `ConsoMeteo`. Repli automatique sur les scripts Google
+tant que la fonction n'est pas déployée.

@@ -32,7 +32,8 @@
 
   /* ================= Firebase ================= */
   var D = { params: {}, halls: [], lignes: [], corr: {}, salons: [], releves: {}, srv: {}, logo: '', temp: null };
-  var A, F, auth, db;
+  var A, F, auth, db, AC = null, acInst = null;
+  var API_FB = 'https://europe-west9-equipe-batiment.cloudfunctions.net/conso-api';
   var recu = {}, attendus = ['config', 'salons', 'releves', 'srv', 'temp', 'logo'];
   var pret, pretOk, pretKo;
   pret = new Promise(function (ok, ko) { pretOk = ok; pretKo = ko; });
@@ -55,7 +56,7 @@
   ]).then(function (m) {
     A = m[1]; F = m[2];
     var app = m[0].initializeApp(FIREBASE);
-    if (m[3]) try { m[3].initializeAppCheck(app, { provider: new m[3].ReCaptchaEnterpriseProvider('6Le3lBguAAAAAGb774RgCJp5Gd_jfG38Tks9out3'), isTokenAutoRefreshEnabled: true }); } catch (e) { console.warn('App Check :', e); }
+    if (m[3]) try { AC = m[3]; acInst = m[3].initializeAppCheck(app, { provider: new m[3].ReCaptchaEnterpriseProvider('6Le3lBguAAAAAGb774RgCJp5Gd_jfG38Tks9out3'), isTokenAutoRefreshEnabled: true }); } catch (e) { console.warn('App Check :', e); }
     auth = A.getAuth(app);
     try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
     catch (e) { db = F.getFirestore(app); }
@@ -86,6 +87,12 @@
       if (s.exists()) { try { D.srv = JSON.parse(s.data().json || '{}'); } catch (e) { D.srv = {}; } }
       if (s.exists() || !s.metadata.fromCache) arrive('srv');
     }, ko);
+    // Météo récupérée par la fonction Firebase (ou saisie dans l'appli) : complète / remplace celle du script
+    F.onSnapshot(F.collection(db, 'ConsoMeteo'), function (s) {
+      var j = {}, etat = {};
+      s.docs.forEach(function (d) { if (d.id === 'etat') etat = d.data(); else Object.assign(j, d.data().j || {}); });
+      D.meteoFb = j; D.meteoEtat = etat;
+    }, function (e) { console.warn('ConsoMeteo : ' + fbErr(e)); });
     F.onSnapshot(F.doc(db, 'ConsoServeur', 'logo'), function (s) { if (s.exists()) D.logo = s.data().data || ''; if (s.exists() || !s.metadata.fromCache) arrive('logo'); }, function () { arrive('logo'); });
     // Températures des halls : appli Dalkia (même projet Firebase)
     var pts = null, seuils = {}, rel = null;
@@ -185,6 +192,34 @@
       throw e;
     });
   }
+  /* ---------- fonction Firebase conso-api (Météo-France, FusionSolar) ---------- */
+  /** Appel de la fonction ; erreur.absente = fonction pas (encore) déployée ou injoignable → repli sur le script */
+  function fonction(corps) {
+    return session(false).then(function () {
+      return Promise.all([auth.currentUser.getIdToken(),
+        acInst && AC ? AC.getToken(acInst, false).then(function (t) { return t.token; }, function () { return ''; }) : '']);
+    }).then(function (t) {
+      var h = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t[0] };
+      if (t[1]) h['X-Firebase-AppCheck'] = t[1];
+      return fetch(API_FB, { method: 'POST', headers: h, body: JSON.stringify(corps) }).then(function (r) {
+        if (r.status === 404) { var e = new Error('Fonction Firebase conso-api non déployée.'); e.absente = true; throw e; }
+        return r.json().catch(function () { var e = new Error('Réponse illisible de la fonction Firebase (HTTP ' + r.status + ').'); e.absente = r.status >= 500; throw e; })
+          .then(function (j) {
+            if (r.status === 403 && /Code des réglages/.test(j.erreur || '')) LS.removeItem('conso_reglages_uid');
+            if (!j.ok) throw new Error(j.erreur || ('Erreur ' + r.status));
+            return j.data;
+          });
+      }, function () { var e = new Error('Fonction Firebase injoignable.'); e.absente = true; throw e; });
+    });
+  }
+  function relireMeteo() {
+    return Promise.all([F.getDocsFromServer(F.collection(db, 'ConsoMeteo')).then(function (s) {
+      var j = {}, etat = {};
+      s.docs.forEach(function (d) { if (d.id === 'etat') etat = d.data(); else Object.assign(j, d.data().j || {}); });
+      D.meteoFb = j; D.meteoEtat = etat;
+    }).catch(function () {})]);
+  }
+
   /** Relit tout de suite les données publiées par le script (après une action du script) */
   function relireServeur() {
     return F.getDocFromServer(F.doc(db, 'ConsoServeur', 'donnees')).then(function (s) {
@@ -281,8 +316,25 @@
     },
 
     // Actions du script Google qui changent la météo ou le PV : on relit ensuite ce qu'il a publié
-    saveMeteoJour: function (d, tx, tn) { return script('saveMeteoJour', [d, tx, tn]).then(relireServeur).then(bootstrap); },
-    majMeteo: function () { return script('majMeteo', []).then(function (r) { return relireServeur().then(function () { return r; }); }); },
+    /* Saisie manuelle d'un jour de météo : dans Firebase (ConsoMeteo), plus dans le classeur */
+    saveMeteoJour: function (d, tx, tn) {
+      return prets().then(ensureAuth).then(function () {
+        var date = M.iso(d), x = M.num(tx), n = M.num(tn);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || x === '' || n === '') throw new Error('Date, T max et T min attendues.');
+        var j = {}; j[date] = { tx: x, tn: n, src: 'Saisie' };
+        ecrire(F.setDoc(F.doc(db, 'ConsoMeteo', date.slice(0, 4)), { j: j }, { merge: true }), 'Météo');
+        D.meteoFb = Object.assign({}, D.meteoFb || {}, j);
+        return bootstrap();
+      });
+    },
+    /* Mise à jour Météo-France : fonction Firebase ; ancien script si elle n'est pas encore déployée */
+    majMeteo: function () {
+      return prets().then(function () { return fonction({ action: 'meteo' }); }).then(function (r) { return relireMeteo().then(function () { return r; }); },
+        function (e) {
+          if (!e.absente) throw e;
+          return script('majMeteo', []).then(function (r) { return relireServeur().then(function () { return r; }); });
+        });
+    },
     pvEnregistrer: function (p) { return script('pvEnregistrer', [p]).then(function (r) { return relireServeur().then(function () { return r; }); }); },
     pvSupprimerIndispo: function (k) { return script('pvSupprimerIndispo', [k]).then(function (r) { return relireServeur().then(function () { return r; }); }); }
   };
@@ -307,6 +359,9 @@
   /* Outils pour rapports.js (rapports PDF, export CSV, charte faits dans l'appli) */
   window.CONSO_FB = {
     D: D, appel: appel, prets: prets, ensureAuth: ensureAuth, reglage: reglage, script: script, fbErr: fbErr,
+    fonction: fonction,
+    /** Production PV du hall 4.3 (FusionSolar) par la fonction Firebase : liste [{date, production_kWh}] du mois de la date */
+    fusionsolar: function (date) { return prets().then(function () { return fonction({ action: 'fusionsolar', type: 'jour', date: date }); }); },
     lireDoc: function (coll, id) {
       return demarrage.then(function () { return F.getDoc(F.doc(db, coll, id)); }).then(function (s) { return s.exists() ? s.data() : null; });
     },

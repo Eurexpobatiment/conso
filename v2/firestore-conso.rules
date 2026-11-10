@@ -44,6 +44,14 @@
       allow write: if cSession() && id in ['donnees', 'logo', 'charte'];
     }
 
+    // Météo : ConsoMeteo/{année} (champ j) écrit par la fonction conso-api ou par la saisie manuelle de l'appli ;
+    // ConsoMeteo/etat écrit par la fonction seulement
+    match /ConsoMeteo/{id} {
+      allow read: if true;
+      allow create, update: if request.auth != null && id.matches('^[0-9]{4}$')
+        && request.resource.data.keys().hasOnly(['j']) && request.resource.data.j is map;
+    }
+
     // Un appareil (ou le script) qui a donné le bon code (connexion anonyme)
     match /ConsoSessions/{uid} {
       allow read, delete: if request.auth != null && request.auth.uid == uid;

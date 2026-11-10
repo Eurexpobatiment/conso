@@ -1,0 +1,11 @@
+{
+  "name": "conso-api",
+  "version": "1.0.0",
+  "description": "Appels d'API de l'appli Consommations halls – Eurexpo (Météo-France, FusionSolar), à la place des scripts Google",
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "firebase-admin": "^12.6.0"
+  }
+}
