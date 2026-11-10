@@ -538,6 +538,14 @@
   root.M = {
     getBootstrap: getBootstrap, getSalonCalcule: getSalonCalcule, getReleves: getReleves,
     preparerSalon: preparerSalon, nettoyerLigne: nettoyerLigne, cinq: cinq, num: num_, iso: iso_, maintenant: maintenant,
-    defaultCorr: defaultCorr_, SALON_KEYS: SALON_KEYS, mots: mots
+    defaultCorr: defaultCorr_, SALON_KEYS: SALON_KEYS, mots: mots,
+    /* pour rapports.js : tous les salons calculés (toutes années) et les données de base */
+    tousCalcules: function (D) {
+      var X = tout(D);
+      X.tous = salonsCalcules_(D, X.P, X.halls, X.lignes, X.salons, X.releves, X.meteo, X.T);
+      return X;
+    },
+    calculerSalons: function (D, X, salons) { return salonsCalcules_(D, X.P, X.halls, X.lignes, salons, X.releves, X.meteo, X.T); },
+    djuJour: djuJour_, dayNum: dayNum_, isoFromDayNum: isoFromDayNum_, editionPrecedente: editionPrecedente
   };
 })(typeof window !== 'undefined' ? window : this);

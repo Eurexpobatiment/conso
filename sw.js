@@ -1,8 +1,8 @@
 /* Service worker de la version Firebase : garde l'écran de l'appli et les modules Firebase sur l'appareil.
    Les données sont gardées par Firebase (copie locale), pas ici. */
-var CACHE = 'conso-fb-v10';
+var CACHE = 'conso-fb-v11';
 var FBV = '10.14.1';
-var SHELL = ['./', 'index.html', 'metier.js', 'donnees.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
+var SHELL = ['./', 'index.html', 'metier.js', 'donnees.js', 'rapports.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'https://www.gstatic.com/firebasejs/' + FBV + '/firebase-app.js',
   'https://www.gstatic.com/firebasejs/' + FBV + '/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/' + FBV + '/firebase-firestore.js',
@@ -19,7 +19,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
   var url = new URL(e.request.url);
-  if (url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/') === 0) {
+  if ((url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/') === 0) || url.hostname === 'cdn.jsdelivr.net') {
     e.respondWith(caches.match(e.request).then(function (r) {
       return r || fetch(e.request).then(function (res) { var c = res.clone(); caches.open(CACHE).then(function (k) { k.put(e.request, c); }); return res; });
     }));

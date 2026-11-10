@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <script src="metier.js"></script>
 <script src="donnees.js"></script>
+<script src="rapports.js"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function(){});</script>
 <style>
 :root{
@@ -1166,7 +1167,7 @@ $('btnRapport').onclick=function(){
   if(!editSalon||!editSalon.id)return;
   $('psRapport').innerHTML='<div class="banner info">Rapport PDF : '
     +'<button type="button" class="btn sm" id="rpDl">Enregistrer sur l\'ordinateur…</button> '
-    +'<button type="button" class="btn sm" id="rpDrive">Enregistrer dans Drive</button> '
+    +'<button type="button" class="btn sm" id="rpDrive">Enregistrer dans Drive (ancien script)</button> '
     +'<button type="button" class="btn sm" id="rpNo">Annuler</button></div>';
   $('rpNo').onclick=function(){$('psRapport').innerHTML=''};
   $('rpDl').onclick=function(){genRapport_('fichier')};
@@ -1175,7 +1176,7 @@ $('btnRapport').onclick=function(){
 function genRapport_(mode){
   if(!editSalon||!editSalon.id)return;
   var b=$('btnRapport'); b.disabled=true; b.textContent='Rapport…';
-  $('psRapport').innerHTML='<div class="banner info">Génération du rapport PDF en cours (10 à 30 s)…</div>';
+  $('psRapport').innerHTML='<div class="banner info">Génération du rapport PDF en cours (20 à 40 s, sur cet appareil)…</div>';
   run('rapportSalonPdf',editSalon.id,mode).then(function(r){
     if(r.url){
       $('psRapport').innerHTML='<div class="banner info">Rapport enregistré dans le dossier Drive « '+esc(r.dossier)+' » : <a href="'+esc(r.url)+'" target="_blank" rel="noopener"><b>ouvrir '+esc(r.nom)+'</b></a></div>';
@@ -1361,7 +1362,7 @@ function pvImport(){
 function pvPdf(){
   $('pvPdfMsg').innerHTML='<div class="banner info">Rapport PDF : '
     +'<button type="button" class="btn sm" id="pvDl">Enregistrer sur l\'ordinateur…</button> '
-    +'<button type="button" class="btn sm" id="pvDrive">Enregistrer dans Drive</button> '
+    +'<button type="button" class="btn sm" id="pvDrive">Enregistrer dans Drive (ancien script)</button> '
     +'<button type="button" class="btn sm" id="pvNo">Annuler</button></div>';
   $('pvNo').onclick=function(){$('pvPdfMsg').innerHTML='';};
   $('pvDl').onclick=function(){pvPdfGen_('fichier');};
@@ -1369,7 +1370,7 @@ function pvPdf(){
 }
 function pvPdfGen_(mode){
   var b=$('pvBtnPdf');b.disabled=true;b.textContent='Génération…';
-  $('pvPdfMsg').innerHTML='<div class="banner info">Génération du rapport PDF en cours (10 à 30 s)…</div>';
+  $('pvPdfMsg').innerHTML='<div class="banner info">Génération du rapport PDF en cours (20 à 40 s, sur cet appareil)…</div>';
   run('pvRapportPdf',PV.mois,mode).then(function(r){
     if(r.url){
       $('pvPdfMsg').innerHTML='<div class="banner info">Rapport enregistré dans le dossier Drive « '+esc(r.dossier)+' » : <a href="'+esc(r.url)+'" target="_blank" rel="noopener"><b>ouvrir '+esc(r.nom)+'</b></a></div>';

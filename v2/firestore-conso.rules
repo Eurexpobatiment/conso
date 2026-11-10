@@ -38,10 +38,10 @@
       allow delete: if request.auth != null;
     }
 
-    // Données publiées par le script Google (météo, DJU, Conso_Site, PV, logo)
+    // Données publiées par le script Google (météo, DJU, Conso_Site, PV, logo) ; charte = photo et logo des rapports PDF (appli)
     match /ConsoServeur/{id} {
       allow read: if true;
-      allow write: if cSession() && id in ['donnees', 'logo'];
+      allow write: if cSession() && id in ['donnees', 'logo', 'charte'];
     }
 
     // Un appareil (ou le script) qui a donné le bon code (connexion anonyme)

@@ -888,7 +888,6 @@
     }).then(function () {
       var cover = zone.querySelector('#rpCover'), body = zone.querySelector('#rpBody');
       var pages = paginer(body, zone, (297 - 10 - 12) * MM);
-      window._rpDbg = { pages: pages.length };
       // fenêtre de rendu assez haute pour une page entière (sinon html2canvas coupe au bas de l'écran)
       var opt = { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 1400, windowHeight: 1600, scrollX: 0, scrollY: 0 };
       var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });

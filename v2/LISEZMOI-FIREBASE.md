@@ -48,3 +48,18 @@ Retour en arrière possible : `desinstallerFirebase` (le classeur redevient la r
 - Calculs : `metier.js`, reprise à l'identique du script (vérifié sur le classeur du 6 nov. 2026 : mêmes résultats pour les
   27 salons et pour l'aide à la saisie des index).
 - Toujours faits par le script Google : météo Météo-France, rapports PDF salon et PV, onglet PV, charte, export CSV, onglet Eau.
+
+## Rapports PDF, export CSV et charte faits dans l'appli (10 nov. 2026)
+Fichier `rapports.js` (racine du dépôt) : plus besoin du script Google pour
+- **Rapport PDF d'un salon** : mêmes données, phrases d'interprétation, plan des halls, graphiques et comparaison avec les
+  éditions précédentes que le script, calculés depuis Firebase ; PDF fabriqué sur l'appareil (html2canvas + jsPDF, chargés
+  depuis cdn.jsdelivr.net et gardés par le service worker). Le texte du PDF est une image (non sélectionnable).
+- **Rapport PV mensuel** : PDF fait dans l'appli ; les données PV (injection, parkings, hall 4.3, indisponibilités) sont encore
+  lues au script (`pvMois`) tant qu'elles sont dans le classeur.
+- **Export CSV** : calculé dans l'appli (mêmes colonnes).
+- **Charte** (photo et logo de la page de garde) : document Firebase `ConsoServeur/charte`, importé depuis Réglages
+  (.pptx, .png ou .jpg, images réduites pour tenir sous 1 Mo). Tant qu'elle n'est pas importée : logo de l'appli, pas de photo.
+  **Règles** : la ligne ConsoServeur doit autoriser `'charte'` (voir `firestore-conso.rules`).
+- « Enregistrer dans Drive (ancien script) » passe encore par le script Google, en secours.
+
+Reste au script : météo Météo-France (clé), DJU historiques, Conso_Site, données PV (saisie / import / FusionSolar), onglet Eau.

@@ -2,7 +2,8 @@
  * - Paramètres, surfaces, lignes de comptage, correspondance, salons, index : dans Firebase (projet equipe-batiment),
  *   lus et écrits directement par l'appli (copie gardée sur l'appareil : consultation et saisie sans réseau).
  * - Calculs : metier.js (mêmes formules que le script Google).
- * - Météo Météo-France, DJU historiques, Conso_Site, PV, rapports PDF, charte : toujours faits par le script Google
+ * - Rapports PDF (salon, PV), export CSV et charte des rapports : faits dans l'appli (rapports.js), depuis le 10 nov. 2026.
+ * - Météo Météo-France, DJU historiques, Conso_Site, données PV : toujours gérés par le script Google
  *   (les clés restent dans le script), qui publie ses résultats dans Firebase (ConsoServeur).
  * - Réglages : protégés par le code des réglages (demandé une fois par appareil).
  */
@@ -287,6 +288,8 @@
   };
 
   function appel(fn, args) {
+    var EXT = window.CONSO_EXT || {};
+    if (EXT[fn]) return Promise.resolve().then(function () { return EXT[fn].apply(null, args); });
     if (LOCAL[fn]) return Promise.resolve().then(function () { return LOCAL[fn].apply(null, args); });
     return script(fn, args);
   }
@@ -301,5 +304,12 @@
     } });
   }
   window.google = { script: { run: runner(null, null), host: { close: function () {}, setHeight: function () {}, setWidth: function () {}, editor: {} } } };
-  window.CONSO_FB = { D: D, appel: appel };
+  /* Outils pour rapports.js (rapports PDF, export CSV, charte faits dans l'appli) */
+  window.CONSO_FB = {
+    D: D, appel: appel, prets: prets, ensureAuth: ensureAuth, reglage: reglage, script: script, fbErr: fbErr,
+    lireDoc: function (coll, id) {
+      return demarrage.then(function () { return F.getDoc(F.doc(db, coll, id)); }).then(function (s) { return s.exists() ? s.data() : null; });
+    },
+    ecrireDoc: function (coll, id, data) { return reglage(function () { return F.setDoc(F.doc(db, coll, id), data); }); }
+  };
 })();
