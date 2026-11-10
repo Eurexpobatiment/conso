@@ -57,7 +57,8 @@
     A = m[1]; F = m[2];
     var app = m[0].initializeApp(FIREBASE);
     if (m[3]) try { AC = m[3]; acInst = m[3].initializeAppCheck(app, { provider: new m[3].ReCaptchaEnterpriseProvider('6Le3lBguAAAAAGb774RgCJp5Gd_jfG38Tks9out3'), isTokenAutoRefreshEnabled: true }); } catch (e) { console.warn('App Check :', e); }
-    auth = A.getAuth(app);
+    /* Connexion partagée entre toutes les applis eurexpobatiment.github.io : même rangement partout (sinon elles se « volent » la session) */
+    try { auth = A.initializeAuth(app, { persistence: [A.browserLocalPersistence, A.indexedDBLocalPersistence] }); } catch (e) { auth = A.getAuth(app); }
     try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
     catch (e) { db = F.getFirestore(app); }
     ecouter();
