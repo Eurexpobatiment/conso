@@ -87,7 +87,7 @@
       '.rp td{border-bottom:1px solid ' + CH.ligne + ';padding:3.5px 6px;font-size:8.5pt;text-align:right}' +
       '.rp tr.tot td{font-weight:bold;background:' + CH.vertPale + ';color:' + CH.fonce + ';border-bottom:0}' +
       '.rp tr.hl td{font-weight:bold;color:' + CH.fonce + '}' +
-      '.rp table.kt{border-collapse:separate;border-spacing:2.5mm;margin:0 -2.5mm;width:calc(100% + 5mm)}' +
+      '.rp table.kt{border-collapse:separate;border-spacing:2.5mm;margin:0 -2.5mm 0 -2.5mm;width:calc(100% + 2.5mm);table-layout:fixed}' +
       '.rp table.kt td{background:' + CH.clair + ';border:0;border-top:3px solid ' + CH.vert + ';padding:3mm 3mm 2.5mm;vertical-align:top;text-align:left;width:25%}' +
       '.rp .kv{font-size:14pt;font-weight:bold;color:' + CH.fonce + ';line-height:1.1}.rp .kl{font-size:7.8pt;color:' + CH.gris + ';margin-top:1mm;line-height:1.25}' +
       '.rp .syn{background:' + CH.vertPale + ';border-left:4px solid ' + CH.vert + ';padding:2mm 4mm;margin:2mm 0}' +
