@@ -887,43 +887,21 @@
       return attendreImages(zone);
     }).then(function () {
       var cover = zone.querySelector('#rpCover'), body = zone.querySelector('#rpBody');
-      // le corps est mis dans sa « fenêtre » de page avant d'être mesuré (mêmes positions qu'au dessin)
-      var vue = document.createElement('div');
-      vue.style.cssText = 'position:relative;overflow:hidden;width:182mm;background:#fff';
-      zone.appendChild(vue); vue.appendChild(body);
-      var cut = coupures(body), hPage = (297 - 10 - 12) * MM, pages = [], debut = 0;
-      // découpage en pages : à la fin d'un bloc, jamais juste après un titre ; « brk » = nouvelle page
-      while (debut < cut.hauteur - 2) {
-        var fin = Math.min(cut.hauteur, debut + hPage);
-        var forcee = cut.forcees.filter(function (y) { return y > debut + 20 && y < fin; })[0];
-        if (forcee) fin = forcee;
-        else if (fin < cut.hauteur) {
-          var ok = cut.points.filter(function (y) { return y > debut + hPage * 0.35 && y <= fin; });
-          if (ok.length) fin = ok[ok.length - 1];
-        }
-        pages.push([debut, fin]); debut = fin;
-      }
-      // chaque page est dessinée à part (les grands canevas sont refusés sur iPhone)
-      vue.style.height = cut.hauteur + 'px';
-      body.style.position = 'absolute'; body.style.left = '0'; body.style.top = '0';
-      window._rpDbg = { pages: pages, cut: cut };
+      var pages = paginer(body, zone, (297 - 10 - 12) * MM);
+      window._rpDbg = { pages: pages.length };
       // fenêtre de rendu assez haute pour une page entière (sinon html2canvas coupe au bas de l'écran)
       var opt = { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 1400, windowHeight: 1600, scrollX: 0, scrollY: 0 };
       var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
       return window.html2canvas(cover.firstChild, opt).then(function (cc) {
         pdf.addImage(cc.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 210, 297);
-        cover.remove();
+        cover.style.display = 'none';
         return pages.reduce(function (p, pg, i) {
           return p.then(function () {
-            // une fenêtre neuve par page (html2canvas garde sinon la taille de la précédente)
-            var v = vue.cloneNode(true);
-            v.style.display = 'block'; v.style.height = (pg[1] - pg[0]) + 'px'; v.firstChild.style.top = (-pg[0]) + 'px';
-            vue.style.display = 'none'; zone.appendChild(v);
-            return window.html2canvas(v, opt).then(function (c) {
-              v.remove();
+            pages.forEach(function (x) { x.style.display = x === pg ? 'block' : 'none'; });
+            return window.html2canvas(pg, opt).then(function (c) {
               pdf.addPage();
               pdf.setFillColor(0, 171, 137); pdf.rect(0, 10, 7, 297 - 22, 'F');
-              pdf.addImage(c.toDataURL('image/jpeg', 0.88), 'JPEG', 16, 10, 182, (pg[1] - pg[0]) / MM);
+              pdf.addImage(c.toDataURL('image/jpeg', 0.88), 'JPEG', 16, 10, 182, c.height / c.width * 182);
               pdf.setFontSize(7); pdf.setTextColor(100, 116, 139);
               pdf.text((i + 2) + ' / ' + (pages.length + 1), 198, 291, { align: 'right' });
             });
@@ -932,24 +910,62 @@
       }).then(function () { return { nom: nom, b64: pdf.output('datauristring').split(',')[1] }; });
     }).finally(function () { if (zone) zone.remove(); });
   }
-  /** Endroits où une page peut se terminer (entre deux blocs), en px CSS depuis le haut du corps */
-  function coupures(body) {
-    var top0 = body.getBoundingClientRect().top, pts = [], forcees = [];
-    var sel = 'h2,h3,p,li,tr,.img,table.kt,.syn,.note,.sub,h1,div.muted,table';
-    [].slice.call(body.querySelectorAll(sel)).forEach(function (el) {
-      var r = el.getBoundingClientRect(), y = r.top - top0, prev = el.previousElementSibling;
-      if (el.classList.contains('brk')) forcees.push(y - 1);
-      // pas de coupure juste après un titre
-      if (prev && /^H[123]$/.test(prev.tagName)) return;
-      if (el.tagName === 'LI' && !prev && el.parentNode.previousElementSibling && /^H[123]$/.test(el.parentNode.previousElementSibling.tagName)) return;
-      if (el.tagName === 'TR' && !el.previousElementSibling) return; // pas entre l'en-tête et la 1re ligne
-      if (el.tagName === 'TR' && el.parentNode.firstElementChild && el.parentNode.firstElementChild.querySelector('th') && el === el.parentNode.children[1]) return;
-      pts.push(y - 1);
-      if (/^(TABLE|P|UL|DIV)$/.test(el.tagName) || el.classList.contains('img')) pts.push(r.bottom - top0 + 1);
-    });
-    pts.sort(function (a, b) { return a - b; }); forcees.sort(function (a, b) { return a - b; });
-    var rb = body.getBoundingClientRect();
-    return { points: pts, forcees: forcees, hauteur: rb.height, largeur: rb.width };
+  /** Répartit le contenu du rapport en pages A4 (blocs entiers ; tableaux et listes coupés entre deux lignes,
+   *  en-tête de tableau répété ; un titre reste avec ce qui le suit ; « brk » = nouvelle page). */
+  function paginer(body, zone, H) {
+    var pages = [], cur;
+    function nouvelle() {
+      cur = document.createElement('div'); cur.className = 'rp';
+      cur.style.cssText = 'width:182mm;background:#fff;display:flow-root';
+      zone.appendChild(cur); pages.push(cur);
+    }
+    function trop() { return cur.offsetHeight > H; }
+    function estTitre(el) { return el && /^H[123]$/.test(el.tagName); }
+    function vide() { return !cur.children.length; }
+    nouvelle();
+    var file = [].slice.call(body.children);
+    while (file.length) {
+      var el = file.shift();
+      if (el.classList && el.classList.contains('brk') && !vide()) nouvelle();
+      if (vide() && /^H[12]$/.test(el.tagName)) el.style.marginTop = '0';
+      cur.appendChild(el);
+      if (!trop()) continue;
+      // découpable : tableau (hors tuiles) ou liste
+      var lignes = el.tagName === 'TABLE' && !el.classList.contains('kt') ? [].slice.call(el.rows)
+        : el.tagName === 'UL' ? [].slice.call(el.children) : null;
+      if (lignes && lignes.length > 1) {
+        var tete = el.tagName === 'TABLE' && lignes[0].querySelector('th') ? lignes[0] : null;
+        var corps = lignes.filter(function (r) { return r !== tete; });
+        var conteneur = el.tagName === 'TABLE' ? (el.tBodies[0] || el) : el;
+        corps.forEach(function (r) { r.remove(); });
+        var mis = 0;
+        while (mis < corps.length) { conteneur.appendChild(corps[mis]); if (trop()) { corps[mis].remove(); break; } mis++; }
+        if (mis < 2 && corps.length > 2) { // trop peu de place : tout sur la page suivante
+          corps.slice(0, mis).forEach(function (r) { r.remove(); }); mis = 0;
+        }
+        if (mis >= corps.length) continue;
+        var suite = el.cloneNode(false);
+        if (el.tagName === 'TABLE') { var tb = document.createElement('tbody'); suite.appendChild(tb); if (tete) tb.appendChild(tete.cloneNode(true)); corps.slice(mis).forEach(function (r) { tb.appendChild(r); }); }
+        else corps.slice(mis).forEach(function (r) { suite.appendChild(r); });
+        if (!mis) { el.remove(); var avant = cur, t0 = cur.lastElementChild; nouvelle(); if (estTitre(t0) && avant.children.length > 1) { avant.removeChild(t0); t0.style.marginTop = '0'; cur.appendChild(t0); } }
+        else nouvelle();
+        file.unshift(suite);
+        continue;
+      }
+      // bloc entier sur la page suivante (avec son titre)
+      if (cur.children.length > 1) {
+        el.remove();
+        var prec = cur.lastElementChild, avec = [];
+        if (estTitre(prec) && cur.children.length > 1) { prec.remove(); avec.push(prec); }
+        nouvelle();
+        avec.forEach(function (x) { x.style.marginTop = '0'; cur.appendChild(x); });
+        file.unshift(el);
+      }
+      // sinon : bloc plus haut qu'une page, laissé tel quel (rare)
+    }
+    pages = pages.filter(function (p) { return p.children.length; });
+    pages.forEach(function (p) { var f = p.firstElementChild; if (f) f.style.marginTop = '0'; });
+    return pages;
   }
 
   /* ================= export CSV ================= */
