@@ -202,6 +202,11 @@ body.ro #pSalon .form .cap{display:none}
         <div class="legend" id="djuLegend"></div>
         <div class="chartbox" id="chDJU"></div>
       </div>
+      <div class="card">
+        <h2>Élec du site par mois : Enedis + PV autoconsommé (MWh)</h2>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Élec Enedis</span><span><i style="background:#00AB89"></i>PV parkings</span><span><i style="background:#7FD5C4"></i>PV hall 4.3</span><span id="epvTot" style="margin-left:auto"></span></div>
+        <div class="chartbox" id="chElecPV"></div>
+      </div>
     </div>
 <div class="card">
 <h2>Consommation spécifique globale par salon (kWh/m²/jour)</h2>
@@ -693,7 +698,39 @@ function renderCharts(){
     xl.setAttribute('x1',XX(i));xl.setAttribute('x2',XX(i));xl.style.display='';
     showTip(e,'<b>'+moisL[i]+'</b>'+ys.slice().reverse().map(function(y){var k=ys.indexOf(y);return '<i style="background:var('+cols[k]+')"></i>'+y+' : '+(years[y][i]==null?'—':fmt(years[y][i]))}).join('<br>'))};
   hit.onmouseleave=function(){xl.style.display='none';hideTip()};
-  renderSite();renderKwhM2();
+  renderSite();renderKwhM2();renderElecPV();
+}
+// ---- barres empilées par mois : élec Enedis du site + PV autoconsommé (parkings, hall 4.3)
+var EPV={an:null,data:null,enc:false};
+function renderElecPV(){
+  var bx=$('chElecPV'); if(!bx||!B)return;
+  var an=String(B.params.annee), pvd=(typeof PV!=='undefined'&&PV&&PV.data&&PV.data.annee)||null;
+  if(pvd&&pvd.length&&String(pvd[0].mois).slice(0,4)===an)EPV={an:an,data:pvd,enc:false}; // onglet PV déjà ouvert : mêmes chiffres, sans nouvel appel
+  else if(EPV.an!==an&&!EPV.enc){EPV.enc=true;var now=new Date(),mm=String(now.getFullYear())===an?('0'+(now.getMonth()+1)).slice(-2):'12';
+    run('pvMois',an+'-'+mm).then(function(d){EPV={an:an,data:(d&&d.annee)||[],enc:false};renderElecPV()},function(){EPV={an:an,data:[],enc:false};renderElecPV()})}
+  var M=[];for(var i=0;i<12;i++)M.push({e:0,n:0,park:0,h43:0});
+  (B.site||[]).forEach(function(r){if(r.d.slice(0,4)!==an||r.e==null)return;var m=M[+r.d.slice(5,7)-1];m.e+=r.e;m.n++});
+  ((EPV.an===an&&EPV.data)||[]).forEach(function(a){var m=M[+String(a.mois).slice(5,7)-1];if(!m)return;m.park=(a.park||0)/1000;m.h43=(a.h43||0)/1000});
+  var tot=M.map(function(m){return m.e+m.park+m.h43}), vmax=Math.max.apply(null,tot);
+  if(!(vmax>0)){bx.innerHTML='<div class="empty">Pas encore de données.</div>';$('epvTot').textContent='';return}
+  var te=0,tp=0;M.forEach(function(m){te+=m.e;tp+=m.park+m.h43});
+  $('epvTot').textContent='Cumul : Enedis '+fmt(te,0)+' MWh · PV '+fmt(tp,0)+' MWh ('+fmt(tp/(te+tp)*100,1)+' %)';
+  var W=bx.clientWidth||600,H=300,L=44,T=10,Bm=24,pw=W-L-10,ph=H-T-Bm,st=pw/12,bw=Math.min(34,st*0.62);
+  var tk=ticks(0,niceMax(vmax),5),mx=tk[tk.length-1],Y=function(v){return T+(mx-v)/mx*ph},X=function(i){return L+(i+0.5)*st},g='';
+  var ml=['J','F','M','A','M','J','J','A','S','O','N','D'],mL=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  tk.forEach(function(t){g+='<line class="grid" x1="'+L+'" x2="'+(W-10)+'" y1="'+Y(t)+'" y2="'+Y(t)+'"/><text x="'+(L-6)+'" y="'+(Y(t)+4)+'" text-anchor="end">'+t.toLocaleString('fr-FR')+'</text>'});
+  var cols=[cssv('--s1'),'#00AB89','#7FD5C4'];
+  M.forEach(function(m,i){g+='<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="middle">'+ml[i]+'</text>';var base=0;
+    [m.e,m.park,m.h43].forEach(function(v,k){if(!(v>0))return;var y1=Y(base+v),h=Y(base)-y1;g+='<rect class="eb" data-i="'+i+'" x="'+(X(i)-bw/2)+'" y="'+y1+'" width="'+bw+'" height="'+Math.max(h-(k<2?1:0),0.8)+'" rx="2" fill="'+cols[k]+'"/>';base+=v})});
+  g+='<rect x="'+L+'" y="0" width="'+pw+'" height="'+H+'" fill="transparent" id="epvHit"/>';
+  bx.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" height="'+H+'">'+g+'</svg>';
+  var hit=$('epvHit'),bars=bx.querySelectorAll('.eb');
+  hit.onmousemove=function(e){var r=bx.querySelector('svg').getBoundingClientRect(),i=Math.max(0,Math.min(11,Math.floor(((e.clientX-r.left)*W/r.width-L)/st))),m=M[i],t=tot[i];
+    bars.forEach(function(b){b.style.opacity=+b.getAttribute('data-i')===i?1:.45});
+    var nj=new Date(+an,i+1,0).getDate();
+    showTip(e,'<b>'+mL[i]+' '+an+'</b>'+(t>0?'<i style="background:var(--s1)"></i>Élec Enedis : '+fmt(m.e)+' MWh<br><i style="background:#00AB89"></i>PV parkings autoconsommé : '+(m.park>0?fmt(m.park)+' MWh':'—')+'<br><i style="background:#7FD5C4"></i>PV hall 4.3 autoconsommé : '+(m.h43>0?fmt(m.h43)+' MWh':'—')+
+      '<br><span class="muted">Total consommé '+fmt(t)+' MWh · PV '+fmt((m.park+m.h43)/t*100,1)+' %'+(m.n&&m.n<nj?' · Enedis : '+m.n+' j relevés sur '+nj:'')+'</span>':'<span class="muted">Pas de données</span>'))};
+  hit.onmouseleave=function(){bars.forEach(function(b){b.style.opacity=''});hideTip()};
 }
 // ---- kWh/m²/jour par salon (barres, ordre chronologique)
 function renderKwhM2(){
