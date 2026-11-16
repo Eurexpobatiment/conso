@@ -186,7 +186,10 @@ body.ro #pSalon .form .cap{display:none}
     <div class="grid2">
       <div class="card">
         <h2>Élec CVC + gaz par salon (MWh)</h2>
-        <div class="legend"><span><i style="background:var(--s1)"></i>Réel</span><span><i style="background:var(--line-2)"></i>Prévision (DJU)</span></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Réel</span><span><i style="background:var(--line-2)"></i>Prévision (DJU)</span>
+          <span id="chSalonsEch" style="margin-left:auto;display:inline-flex;gap:5px;align-items:center">Échelle
+            <span class="chip" data-ech="adaptee" style="padding:2px 9px;font-size:12px" title="Échelle resserrée : les petits salons restent lisibles (graduations non régulières)">Adaptée</span>
+            <span class="chip" data-ech="lineaire" style="padding:2px 9px;font-size:12px" title="Échelle proportionnelle classique">Linéaire</span></span></div>
         <div class="chartbox tall" id="chSalons"></div>
       </div>
       <div class="card">
@@ -629,13 +632,21 @@ function renderCharts(){
   // ---- barres horizontales : élec CVC + gaz par salon, prévision en barre fine
   var box=$('chSalons'), W=box.clientWidth||600, ss=B.salons.filter(function(s){return s.ind.cvcGaz>0});
   if(!ss.length){box.innerHTML='<div class="empty">Pas encore de consommation.</div>'}else{
-  var lab=Math.min(150,Math.max(90,W*0.28)), rowH=24, top=6, H=top+ss.length*rowH+22, pw=W-lab-12;
-  var mx=niceMax(Math.max.apply(null,ss.map(function(s){return Math.max(s.ind.cvcGaz,isNum(s.ind.prevision)?s.ind.prevision:0)}))), tk=ticks(0,mx,4); mx=tk[tk.length-1];
-  var X=function(v){return lab+Math.max(0,v)/mx*pw}, g='';
+  // échelle « adaptée » (racine carrée, par défaut) : les gros salons n'écrasent plus les petits ; valeur écrite au bout de chaque barre
+  var ech='adaptee';try{if(localStorage.getItem('conso_ech_salons')==='lineaire')ech='lineaire'}catch(e){}
+  var chips=$('chSalonsEch');if(chips){[].forEach.call(chips.querySelectorAll('.chip'),function(c){c.classList.toggle('on',c.getAttribute('data-ech')===ech)});
+    chips.onclick=function(e){var c=e.target.closest&&e.target.closest('.chip');if(!c)return;try{localStorage.setItem('conso_ech_salons',c.getAttribute('data-ech'))}catch(x){}renderCharts()}}
+  var lab=Math.min(150,Math.max(90,W*0.28)), rowH=24, top=6, H=top+ss.length*rowH+22, pw=W-lab-12-46;
+  var vmax=Math.max.apply(null,ss.map(function(s){return Math.max(s.ind.cvcGaz,isNum(s.ind.prevision)?s.ind.prevision:0)})), mx, tk, X, g='';
+  if(ech==='lineaire'){mx=niceMax(vmax); tk=ticks(0,mx,4); mx=tk[tk.length-1]; X=function(v){return lab+Math.max(0,v)/mx*pw}}
+  else{mx=vmax; X=function(v){return lab+Math.sqrt(Math.max(0,v)/mx)*pw};
+    tk=[0];var dern=lab;
+    for(var e10=-1;e10<7;e10++){[1,2.5,5].forEach(function(m){var t=Math.round(m*Math.pow(10,e10)*1e6)/1e6;if(t<=mx&&X(t)-dern>=38){tk.push(t);dern=X(t)}})}}
   tk.forEach(function(t){g+='<line class="grid" x1="'+X(t)+'" x2="'+X(t)+'" y1="'+top+'" y2="'+(H-20)+'"/><text x="'+X(t)+'" y="'+(H-6)+'" text-anchor="middle">'+t.toLocaleString('fr-FR')+'</text>'});
   ss.forEach(function(s,i){var y=top+i*rowH, w=X(s.ind.cvcGaz)-lab, p=isNum(s.ind.prevision)?X(s.ind.prevision)-lab:0;
     var mc=Math.floor((lab-10)/6.3);g+='<text x="'+(lab-8)+'" y="'+(y+rowH/2+4)+'" text-anchor="end">'+esc(s.salon.length>mc?s.salon.slice(0,mc-1)+'…':s.salon)+'</text>'+
       '<path d="'+barPath(lab,y+4,w,11)+'" fill="'+cssv('--s1')+'"/>'+(p>0?'<path d="'+barPath(lab,y+16,p,4)+'" fill="'+cssv('--line-2')+'"/>':'')+
+      '<text x="'+(lab+Math.max(w,p,0)+5)+'" y="'+(y+rowH/2+4)+'" style="font-size:11px">'+fmt(s.ind.cvcGaz,s.ind.cvcGaz>=100?0:1)+'</text>'+
       '<rect x="0" y="'+y+'" width="'+W+'" height="'+rowH+'" fill="transparent" data-i="'+i+'"/>'});
   box.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" height="'+H+'">'+g+'</svg>';
   box.onmousemove=function(e){var r=e.target.getAttribute&&e.target.getAttribute('data-i');if(r==null){hideTip();return}var s=ss[+r];
