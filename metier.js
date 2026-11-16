@@ -150,11 +150,51 @@
         var e = 0, g = 0, nb = 0;
         for (var d = dayNum_(s.debut); d <= dayNum_(s.fin); d++) { var j = jours[isoFromDayNum_(d)]; if (j) { e += j.e; g += j.g; nb++; } }
         // jours relevés dans Conso_Site : valeurs recalculées ; aucun jour (ex. salons d'avant 2026) : valeurs saisies gardées
-        if (nb) { s.elecParc = Math.round(e * 1000) / 1000; s.gaz = Math.round(g * 1000) / 1000; }
+        if (nb) { s.elecParc = Math.round(e * 1000) / 1000; s.gaz = Math.round(g * 1000) / 1000; s.gazDuSite = true; }
       }
       var t = 0, n = 0;
       for (var k = dayNum_(s.debut); k <= dayNum_(s.fin); k++) { var v = park[isoFromDayNum_(k)]; if (v !== undefined && v !== null) { t += v; n++; } }
       if (n) s.pv = Math.round(t) / 1000;
+    });
+    return salons;
+  }
+
+  /* ---------- Gaz partagé entre évènements simultanés ----------
+   * Le gaz vient du compteur GRDF du site : quand plusieurs évènements ont lieu le même jour, le gaz de ce jour est
+   * réparti entre eux au prorata des surfaces louées. s.gazSite garde le gaz du site entier sur les jours de l'évènement,
+   * s.gaz devient la part de l'évènement, s.simultanes liste les autres évènements présents en même temps.
+   * Les valeurs de gaz saisies à la main (jours absents de Conso_Site) ne sont pas touchées. */
+  function surfaceLouee_(s, hallsSurf) {
+    var hs = s.halls ? s.halls.split(/\s*,\s*/).filter(String) : [];
+    var t = hs.reduce(function (a, h) { return a + (hallsSurf[h] || 0); }, 0);
+    return t > 0 ? t : n0_(s.surface);
+  }
+  function partagerGaz(salons, halls, D) {
+    var srv = D.srv || {}, gJour = {}, hallsSurf = {};
+    (halls || []).forEach(function (h) { hallsSurf[h.hall] = h.surface; });
+    (srv.site || []).forEach(function (r) { if (estJour(r.d) && r.g !== null && r.g !== undefined) gJour[r.d] = r.g; });
+    var L = salons.filter(function (s) { return estJour(s.debut) && estJour(s.fin); })
+      .map(function (s) { return { s: s, a: dayNum_(s.debut), b: dayNum_(s.fin), surf: surfaceLouee_(s, hallsSurf) }; });
+    L.forEach(function (x) {
+      var s = x.s;
+      s.gazSite = s.gaz; s.gazPart = ''; s.simultanes = []; s.gazJours = {};
+      var autres = L.filter(function (y) { return y !== x && y.a <= x.b && y.b >= x.a; });
+      if (!autres.length) return;
+      s.simultanes = autres.map(function (y) {
+        return { id: y.s.id, salon: y.s.salon, debut: y.s.debut, fin: y.s.fin, surface: y.surf, jours: Math.min(x.b, y.b) - Math.max(x.a, y.a) + 1 };
+      }).sort(function (p, q) { return p.debut < q.debut ? -1 : p.debut > q.debut ? 1 : 0; });
+      if (!s.gazDuSite || !(x.surf > 0)) return;
+      var part = 0;
+      for (var d = x.a; d <= x.b; d++) {
+        var g = gJour[isoFromDayNum_(d)];
+        if (g === undefined) continue;
+        var tot = x.surf;
+        autres.forEach(function (y) { if (y.a <= d && y.b >= d) tot += y.surf; });
+        part += g * x.surf / tot;
+        s.gazJours[isoFromDayNum_(d)] = g * x.surf / tot;
+      }
+      s.gaz = Math.round(part * 1000) / 1000;
+      s.gazPart = s.gazSite > 0 ? part / s.gazSite : '';
     });
     return salons;
   }
@@ -312,7 +352,7 @@
     o.pvHall = pvFs !== null ? pvFs : (ag.pv || 0);
     o.pvSite = o.pvParking + o.pvHall;
     o.elecGaz = o.elec + n0_(s.gaz);
-    o.parcGaz = n0_(s.elecParc) + n0_(s.gaz);
+    o.parcGaz = n0_(s.elecParc) + n0_(s.gazSite === undefined ? s.gaz : s.gazSite);   // énergie du site : gaz entier, même s'il est partagé
     var djuC = 0, djf = 0, jm = 0;
     if (o.jours) {
       for (var d = dayNum_(s.debut); d <= dayNum_(s.fin); d++) {
@@ -373,7 +413,7 @@
   /* ---------- ce que renvoyait le script à l'interface ---------- */
   function tout(D) {
     var P = readParams(D), halls = readHalls(D), lignes = readLignes(D);
-    var salons = appliquerSite(readSalons(D), D);
+    var salons = partagerGaz(appliquerSite(readSalons(D), D), halls, D);
     return { P: P, halls: halls, lignes: lignes, salons: salons, releves: readReleves(D), meteo: readMeteo(D), T: readTemp(D, halls) };
   }
   /* ---------- comparaison avec l'édition précédente d'un même salon ---------- */

@@ -422,8 +422,16 @@
     } else if (t.sansHalls) C.temp.push('Aucun hall coché pour ce salon.');
     else C.temp.push('Aucun relevé de température pour les halls de ce salon sur la période.');
     // ---- Consommations
-    var gaz = n0_(s.gaz), parc = n0_(s.elecParc);
-    if (parc + gaz > 0) C.conso.push('Énergie consommée par le parc pendant le salon : <b>' + fr_(parc + gaz) + ' MWh</b> (électricité ' + fr_(parc) + ' MWh + gaz ' + fr_(gaz) + ' MWh), soit ' + fr_((parc + gaz) / o.jours) + ' MWh/jour.');
+    var gaz = n0_(s.gaz), parc = n0_(s.elecParc), gazSite = s.gazSite === undefined ? gaz : n0_(s.gazSite);
+    var sim = s.simultanes || [], partage = isN_(s.gazPart);
+    if (parc + gazSite > 0) C.conso.push('Énergie consommée par le parc pendant le salon : <b>' + fr_(parc + gazSite) + ' MWh</b> (électricité ' + fr_(parc) + ' MWh + gaz ' + fr_(gazSite) + ' MWh), soit ' + fr_((parc + gazSite) / o.jours) + ' MWh/jour' +
+      (sim.length ? ', tous évènements du site confondus' : '') + '.');
+    if (sim.length) {
+      var noms = sim.map(function (x) { return '<b>' + h_(x.salon) + '</b> (' + x.jours + ' jour' + (x.jours > 1 ? 's' : '') + ' en commun, ' + fr_(x.surface, 0) + ' m²)'; }).join(', ');
+      if (partage) C.conso.push('Évènement' + (sim.length > 1 ? 's' : '') + ' en même temps sur le site : ' + noms + '. Le gaz, compté par le seul compteur du site, est réparti jour par jour au prorata des surfaces louées : ' +
+        'part de ce salon <b>' + fr_(gaz) + ' MWh</b>, soit ' + pc_(s.gazPart) + ' des ' + fr_(gazSite) + ' MWh du site. Les indicateurs (CVC + gaz, kWh/m²/DJU, écart à la prévision) sont calculés sur cette part.');
+      else C.conso.push('Évènement' + (sim.length > 1 ? 's' : '') + ' en même temps sur le site : ' + noms + '. Le gaz n\'a pas pu être réparti (valeur saisie à la main ou surface manquante) : il est compté en entier pour ce salon.');
+    }
     var usages = o.cvc + o.fm + o.ecl;
     if (o.elec > 0 || usages > 0) {
       if (o.elec > 0) C.conso.push('Électricité des halls loués (lignes « total » des TGBT) : <b>' + fr_(o.elec) + ' MWh</b>' + (parc > 0 ? ', soit ' + pc_(o.elec / parc) + ' de l\'électricité du parc' : '') + '.');
@@ -599,7 +607,7 @@
     h += '<p class="muted">Éditions retrouvées par le nom du salon. Ratios recalculés avec les mêmes formules pour toutes les années ' +
       '(kWh/m²/jour sur élec halls + gaz, kWh/m²/DJU sur CVC + gaz). ' +
       (L.some(function (x, i) { return i > 0 && x.fige; }) ? '* valeurs figées (reprises des classeurs des années précédentes ; CVC non relevé quand « — »). ' : '') +
-      'Élec parc et gaz : compteurs Enedis et GRDF du site sur les jours du salon.</p>';
+      'Élec parc et gaz : compteurs Enedis et GRDF du site sur les jours du salon ; quand plusieurs évènements ont lieu en même temps, le gaz est la part du salon (prorata des surfaces louées).</p>';
     if (L.length >= 2) {
       var R2 = L.slice().reverse();
       h += img_(colonnes({ labels: R2.map(function (x) { return x.an; }), series: [{ name: 'kWh/m²/jour', color: CH.vert, values: R2.map(function (x) { return isN_(x.kwhM2Jour) ? r1_(x.kwhM2Jour, 2) : 0; }) }],
@@ -627,7 +635,7 @@
       [pc_(t.pctConfort), 'Valeurs dans la plage de confort'],
       [u_(o.djuRetenus, 1), 'DJU retenus' + (s.djuForces !== '' ? ' (forcés)' : '') + ' · ' + u_(o.djuJour, 2) + ' / jour'],
       [u_(s.elecParc, 1, 'MWh'), 'Électricité parc (Enedis)'],
-      [u_(s.gaz, 1, 'MWh'), 'Gaz (GRDF)'],
+      [u_(s.gaz, 1, 'MWh'), isN_(s.gazPart) ? 'Gaz · part du salon (' + pc_(s.gazPart) + ' des ' + fr_(s.gazSite) + ' MWh du site)' : 'Gaz (GRDF)'],
       [u_(o.elec, 1, 'MWh'), 'Électricité des halls (TGBT) · dont CVC ' + u_(o.cvc, 1, 'MWh')],
       [u_(o.cvcGaz, 1, 'MWh'), 'CVC + gaz'],
       [isN_(o.kwhM2DJU) ? fr_(o.kwhM2DJU, 3) : 'n.s.', 'kWh/m²/DJU (CVC + gaz)'],
@@ -643,7 +651,17 @@
             '</td><td>' + pc_(x.pctConfort) + '</td><td>' + x.n + '</td></tr>';
         }).join('') + '</table><div class="muted">Températures en °C' + (isN_(t.seuilBas) && isN_(t.seuilHaut) ? ', plage de confort ' + fr_(t.seuilBas) + ' – ' + fr_(t.seuilHaut) + ' °C' : '') + '.</div>';
     }
-    h += '<h2>Consommations</h2>' + ul(C.conso) + img_(chartRep_(R)) + img_(chartSite_(R));
+    h += '<h2>Consommations</h2>' + ul(C.conso);
+    if (isN_(s.gazPart) && (s.simultanes || []).length) {
+      var lg = [{ salon: s.salon, debut: s.debut, fin: s.fin, surface: o.surfaceLouee, jours: o.jours, ici: true }].concat(s.simultanes);
+      h += '<table><tr><th class="l">Évènements en même temps</th><th class="l">Dates</th><th>Jours en commun</th><th>Surface louée (m²)</th></tr>' +
+        lg.map(function (x) {
+          return '<tr' + (x.ici ? ' class="tot"' : '') + '><td class="l">' + h_(x.salon) + (x.ici ? ' (ce rapport)' : '') + '</td><td class="l">' + dcourt_(x.debut) + ' → ' + dcourt_(x.fin) +
+            '</td><td>' + (x.ici ? '—' : x.jours) + '</td><td>' + fr_(x.surface, 0) + '</td></tr>';
+        }).join('') + '</table>' +
+        '<div class="muted">Gaz du site réparti chaque jour entre les évènements présents, au prorata des surfaces louées : ' + fr_(s.gaz) + ' MWh pour ce salon sur ' + fr_(s.gazSite) + ' MWh (' + pc_(s.gazPart) + ').</div>';
+    }
+    h += img_(chartRep_(R)) + img_(chartSite_(R));
     var pt = o.parTgbt || [];
     if (pt.length) {
       var sum = function (k) { return pt.reduce(function (a, x) { return a + (x[k] || 0); }, 0); };
@@ -659,16 +677,17 @@
     h += '<h2>Performance énergétique</h2>' + ul(C.perf) + img_(chartComp_(R));
     if (R.editions && R.editions.length) h += rsHtml_(s, R.editions);
     h += '<h2>Détail jour par jour</h2><table><tr><th class="l">Jour</th><th>T ext. mini</th><th>T ext. maxi</th><th>T ext. moy.</th><th>DJU</th>' +
-      '<th>T halls moy.</th><th>T halls mini</th><th>T halls maxi</th><th>Élec site (MWh)</th><th>Gaz site (MWh)</th></tr>' +
+      '<th>T halls moy.</th><th>T halls mini</th><th>T halls maxi</th><th>Élec site (MWh)</th><th>Gaz site (MWh)</th>' + (isN_(s.gazPart) ? '<th>Gaz part du salon (MWh)</th>' : '') + '</tr>' +
       R.jours.map(function (j) {
         var e = j.ext || {}, i = j.int || {}, st = j.site || {};
         return '<tr><td class="l">' + dfr_(j.date) + '</td><td>' + u_(e.tn) + '</td><td>' + u_(e.tx) + '</td><td>' + u_(e.tmoy) + '</td><td>' + u_(e.dju) +
           '</td><td><b>' + u_(i.moy) + '</b></td><td>' + u_(i.min) + '</td><td>' + u_(i.max) +
-          '</td><td>' + u_(st.e, 2) + '</td><td>' + u_(st.g, 2) + '</td></tr>';
+          '</td><td>' + u_(st.e, 2) + '</td><td>' + u_(st.g, 2) + '</td>' + (isN_(s.gazPart) ? '<td><b>' + u_((s.gazJours || {})[j.date], 2) + '</b></td>' : '') + '</tr>';
       }).join('') + '</table>';
     if (C.qualite.length) h += '<h2>Fiabilité des données</h2>' + ul(C.qualite);
     h += chFin_('Rapport généré le ' + paris() + '. DJU base ' + fr_(P.baseDJU, 0) + ' °C, DJF au-dessus de ' + fr_(P.seuilDJF, 0) +
-      ' °C (météo station ' + h_(P.meteoStation) + '). Électricité parc = compteurs Enedis, gaz = compteurs GRDF du site (onglet Conso_Site). ' +
+      ' °C (météo station ' + h_(P.meteoStation) + '). Électricité parc = compteurs Enedis, gaz = compteurs GRDF du site (onglet Conso_Site)' +
+      (isN_(s.gazPart) ? ', réparti au prorata des surfaces louées entre les évènements présents le même jour' : '') + '. ' +
       'Températures : relevés Dalkia des halls loués. Interprétation calculée automatiquement à partir des données : à confirmer par l\'exploitant.');
     return { cover: cover, body: h };
   }
@@ -786,7 +805,7 @@
           '</td><td>' + pvFr_(s.elecParc === '' ? null : s.elecParc, 1) + '</td><td>' + pvFr_(s.gaz === '' ? null : s.gaz, 1) + '</td><td>' + (typeof o.kwhM2DJU === 'number' ? pvFr_(o.kwhM2DJU, 3) : 'n.s.') + '</td></tr>';
       });
       h += '</table><p class="muted">Jours : jours de l\'évènement ' + (R.d0 ? 'dans la période' : 'dans le mois') + ' (/ durée totale s\'il en déborde). Élec halls et CVC : index des TGBT relevés avant / après l\'évènement. ' +
-        'Élec parc et gaz : compteurs Enedis et GRDF du site sur les jours de l\'évènement (comptés pour chaque évènement s\'ils se chevauchent).</p>';
+        'Élec parc et gaz : compteurs Enedis et GRDF du site sur les jours de l\'évènement (élec parc comptée pour chaque évènement s\'ils se chevauchent ; gaz réparti entre eux au prorata des surfaces louées).</p>';
     }
     return h;
   }

@@ -656,7 +656,7 @@ function renderCharts(){
       '<rect x="0" y="'+y+'" width="'+W+'" height="'+rowH+'" fill="transparent" data-i="'+i+'"/>'});
   box.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" height="'+H+'">'+g+'</svg>';
   box.onmousemove=function(e){var r=e.target.getAttribute&&e.target.getAttribute('data-i');if(r==null){hideTip();return}var s=ss[+r];
-    showTip(e,'<b>'+esc(s.salon)+'</b><i style="background:var(--s1)"></i>Élec parc + gaz : '+fmt(s.ind.parcGaz)+' MWh<br><span class="muted">Élec parc '+fmt(s.elecParc)+' · gaz '+fmt(s.gaz)+' MWh</span>')};
+    showTip(e,'<b>'+esc(s.salon)+'</b><i style="background:var(--s1)"></i>Élec parc + gaz : '+fmt(s.ind.parcGaz)+' MWh<br><span class="muted">Élec parc '+fmt(s.elecParc)+' · gaz '+fmt(s.gazSite!==undefined?s.gazSite:s.gaz)+' MWh</span>')};
   box.onmouseleave=hideTip; box.onclick=function(e){var r=e.target.getAttribute&&e.target.getAttribute('data-i');if(r!=null)openSalon(ss[+r].id)};
   }
   })();
@@ -771,7 +771,7 @@ function openSalon(id){
   editSalon=s;
   $('psTitle').textContent=id?s.salon:'Nouveau salon';
   $('fSalon').value=s.salon; $('fDebut').value=s.debut; $('fFin').value=s.fin; $('fConfort').value=s.confort;
-  $('fSurface').value=v2s(s.surface); $('fGaz').value=v2s(s.gaz); $('fElecParc').value=v2s(s.elecParc); $('fPV').value=v2s(s.pv);
+  $('fSurface').value=v2s(s.surface); $('fGaz').value=v2s(s.gazSite!==undefined?s.gazSite:s.gaz); $('fElecParc').value=v2s(s.elecParc); $('fPV').value=v2s(s.pv);
   $('fDJU').value=v2s(s.djuForces); $('fElecMontage').value=v2s(s.elecMontage); $('fJoursMontage').value=v2s(s.joursMontage); $('fNotes').value=s.notes||'';
   selHalls={}; (s.halls||'').split(/\s*,\s*/).filter(String).forEach(function(h){selHalls[h]=1});
   renderHallChips();
@@ -883,7 +883,7 @@ function renderSalonRes(s){
   $('psResCard').style.display='';$('psTgbtCard').style.display='';$('psTempCard').style.display='';
   renderTemp(s);
   var R=[['Élec halls',fmt(o.elec)+' MWh'],['CVC',fmt(o.cvc)+' MWh'],['Force motrice',fmt(o.fm)+' MWh'],['Éclairage',fmt(o.ecl)+' MWh'],['Autres',fmt(o.autres)+' MWh'],
-    ['Élec + gaz',fmt(o.elecGaz)+' MWh'],['Élec parc (Enedis)',fmt(s.elecParc)+' MWh'],['Prod PV parking',fmt(o.pvParking)+' MWh'],['Prod PV hall 4.3 ('+(o.pvHallSrc||'TGBT')+')',fmt(o.pvHall)+' MWh'],['Prod PV site (autoconsommation)',fmt(o.pvSite)+' MWh'],['Gaz',fmt(s.gaz)+' MWh'],['Surface louée',fmt(o.surfaceLouee,0)+' m²'],['Jours',fmt(o.jours,0)],['DJU retenus',fmt(o.djuRetenus,1)+(s.djuForces!==''?' (forcés)':'')],
+    ['Élec + gaz',fmt(o.elecGaz)+' MWh'],['Élec parc (Enedis)',fmt(s.elecParc)+' MWh'],['Prod PV parking',fmt(o.pvParking)+' MWh'],['Prod PV hall 4.3 ('+(o.pvHallSrc||'TGBT')+')',fmt(o.pvHall)+' MWh'],['Prod PV site (autoconsommation)',fmt(o.pvSite)+' MWh'],[(s.gazPart!==''&&s.gazPart!==undefined?'Gaz (part de l\'évènement, '+Math.round(s.gazPart*100)+' % du site)':'Gaz'),fmt(s.gaz)+' MWh'+(s.gazPart!==''&&s.gazPart!==undefined?' <span class="muted" style="font-weight:400">sur '+fmt(s.gazSite)+'</span>':'')],['Surface louée',fmt(o.surfaceLouee,0)+' m²'],['Jours',fmt(o.jours,0)],['DJU retenus',fmt(o.djuRetenus,1)+(s.djuForces!==''?' (forcés)':'')],
     ['DJU / jour',fmt(o.djuJour,2)],['DJF / jour',fmt(o.djfJour,2)],['kWh / m² / jour (global : élec + gaz)',fmt(o.kwhM2Jour,3)],['kWh / m² / DJU (CVC + gaz)',fmt(o.kwhM2DJU,3)],['Prévision',isNum(o.prevision)?fmt(o.prevision)+' MWh':fmt(o.prevision)],
     ['Écart / prévision',pct(o.ecart)],['Hors talon',isNum(o.horsTalon)?fmt(o.horsTalon)+' MWh ('+pct(o.pctHorsTalon).replace('+','')+')':'—'],
     ['Lignes saisies',o.lignesSaisies+(o.lignesIncompletes?' · '+o.lignesIncompletes+' incomplète(s)':'')]];
@@ -900,6 +900,12 @@ function renderSalonRes(s){
     ban+='<div class="banner warn"><b>Valeurs reprises d\'Excel.</b> Les totaux Élec / CVC / FM / ECL affichés sont ceux de l\'ancien onglet (ses formules étaient propres à ce salon). '+
       'Calcul à partir des index importés : élec '+fmt(o.calcule.elec)+', CVC '+fmt(o.calcule.cvc)+', FM '+fmt(o.calcule.fm)+', ECL '+fmt(o.calcule.ecl)+' MWh.'+
       '<div style="margin-top:8px"><button class="btn sm" id="btnUnfreeze">Utiliser le calcul à partir des index</button></div></div>';
+  }
+  if(s.simultanes&&s.simultanes.length){
+    var partage=s.gazPart!==''&&s.gazPart!==undefined;
+    ban+='<div class="banner info"><b>Évènement'+(s.simultanes.length>1?'s':'')+' en même temps :</b> '+s.simultanes.map(function(x){return esc(x.salon)+' ('+x.jours+' j en commun, '+fmt(x.surface,0)+' m²)'}).join(', ')+'. '+
+      (partage?'Le gaz du site ('+fmt(s.gazSite)+' MWh) est réparti jour par jour au prorata des surfaces louées : part de cet évènement '+fmt(s.gaz)+' MWh ('+Math.round(s.gazPart*100)+' %).'
+        :'Le gaz affiché n\'est pas réparti (valeur saisie à la main ou surface manquante).')+'</div>';
   }
   $('psBanner').innerHTML=ban;
   var u=$('btnUnfreeze'); if(u)u.onclick=function(){
@@ -1521,12 +1527,13 @@ function chEtat(){run('chEtatCharte').then(function(e){$('chEtat').innerHTML=(e.
     var W = box.clientWidth || 600, lab = Math.min(150, Math.max(90, W * 0.28)), rowH = 30, top = 6,
         H = top + ss.length * rowH + 22, pw = W - lab - 12;
     var v = function (x) { return isNum(x) ? x : 0; };
-    var mx = niceMax(Math.max.apply(null, ss.map(function (s) { return Math.max(v(s.elecParc), v(s.gaz)); }))), tk = ticks(0, mx, 4); mx = tk[tk.length - 1];
+    var gS = function (s) { return s.gazSite !== undefined ? s.gazSite : s.gaz; };   // compteur du site (gaz non réparti)
+    var mx = niceMax(Math.max.apply(null, ss.map(function (s) { return Math.max(v(s.elecParc), v(gS(s))); }))), tk = ticks(0, mx, 4); mx = tk[tk.length - 1];
     var X = function (x) { return lab + Math.max(0, x) / mx * pw; }, g = '';
     tk.forEach(function (t) { g += '<line class="grid" x1="' + X(t) + '" x2="' + X(t) + '" y1="' + top + '" y2="' + (H - 20) + '"/><text x="' + X(t) + '" y="' + (H - 6) + '" text-anchor="middle">' + t.toLocaleString('fr-FR') + '</text>'; });
     var c1 = cssv('--s1'), c2 = cssv('--s3'), mc = Math.floor((lab - 10) / 6.3);
     ss.forEach(function (s, i) {
-      var y = top + i * rowH, we = X(v(s.elecParc)) - lab, wg = X(v(s.gaz)) - lab;
+      var y = top + i * rowH, we = X(v(s.elecParc)) - lab, wg = X(v(gS(s))) - lab;
       g += '<text x="' + (lab - 8) + '" y="' + (y + rowH / 2 + 4) + '" text-anchor="end">' + esc(s.salon.length > mc ? s.salon.slice(0, mc - 1) + '…' : s.salon) + '</text>';
       if (we > 0) g += '<path d="' + barPath(lab, y + 4, we, 10) + '" fill="' + c1 + '"/>';
       if (wg > 0) g += '<path d="' + barPath(lab, y + 16, wg, 10) + '" fill="' + c2 + '"/>';
@@ -1535,7 +1542,7 @@ function chEtat(){run('chEtatCharte').then(function(e){$('chEtat').innerHTML=(e.
     box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '">' + g + '</svg>';
     box.onmousemove = function (e) {
       var r = e.target.getAttribute && e.target.getAttribute('data-i'); if (r == null) { hideTip(); return; } var s = ss[+r];
-      showTip(e, '<b>' + esc(s.salon) + '</b><i style="background:var(--s1)"></i>Élec parc (Enedis) : ' + fmt(v(s.elecParc)) + ' MWh<br><i style="background:var(--s3)"></i>Gaz : ' + fmt(v(s.gaz)) + ' MWh<br><span class="muted">Total ' + fmt(v(s.elecParc) + v(s.gaz)) + ' MWh</span>');
+      showTip(e, '<b>' + esc(s.salon) + '</b><i style="background:var(--s1)"></i>Élec parc (Enedis) : ' + fmt(v(s.elecParc)) + ' MWh<br><i style="background:var(--s3)"></i>Gaz : ' + fmt(v(gS(s))) + ' MWh<br><span class="muted">Total ' + fmt(v(s.elecParc) + v(gS(s))) + ' MWh' + (s.gazPart !== '' && s.gazPart !== undefined ? ' · compteurs du site, part gaz de l\'évènement ' + fmt(v(s.gaz)) + ' MWh' : '') + '</span>');
     };
     box.onmouseleave = hideTip;
     box.onclick = function (e) { var r = e.target.getAttribute && e.target.getAttribute('data-i'); if (r != null) openSalon(ss[+r].id); };
