@@ -301,10 +301,10 @@ body.ro #pSalon .form .cap{display:none}
     <div class="card">
       <h2>Lignes de comptage</h2>
       <style>#lgTable th,#lgTable td{text-align:left;vertical-align:middle;white-space:nowrap}#lgTable td:nth-child(5){white-space:normal;min-width:260px}</style>
-      <div class="small muted" style="margin-bottom:8px">TGBT, lignes, nombre de compteurs (1 à 5), coefficient de chaque compteur (ex. « 0,02 » pour index × 20 / 1000), compteurs comptés dans le total élec du hall, usage (CVC / FM / ECL / PV). Une ligne qui a déjà des index ne peut pas être supprimée : la passer en « inactive ».</div>
+      <div class="small muted" style="margin-bottom:8px">TGBT, lignes, nombre de compteurs (1 à 5), coefficient de chaque compteur (ex. « 0,02 » pour index × 20 / 1000), compteurs comptés dans le total élec du hall, usage (CVC / FM / ECL / PV). Une ligne qui a déjà des index ne peut pas être supprimée : la passer en « inactive ».<br><b>Changement de compteur</b> : indiquer en bas la date du premier salon relevé avec le nouveau compteur avant d'enregistrer ; les salons d'avant gardent l'ancien nombre de compteurs, les anciens coefficients et l'ancien usage.</div>
       <div class="row" style="margin-bottom:8px"><input id="lgFiltre" placeholder="Filtrer (TGBT ou ligne)" style="flex:1;min-width:160px"><label class="small" style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="lgInactives" style="width:auto"> voir les inactives</label></div>
       <div class="tablewrap" id="lgTable"></div>
-      <div class="row" style="margin-top:12px"><button class="btn" id="btnAddLigne">＋ Ligne</button><span class="spacer"></span><span class="small muted" id="lgEtat"></span><button class="btn primary" id="btnSaveLignes">Enregistrer les lignes</button></div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="btnAddLigne">＋ Ligne</button><span class="spacer"></span><span class="small muted" id="lgEtat"></span><label class="small" style="display:flex;align-items:center;gap:6px">Modifications valables à partir du <input type="date" id="lgDepuis" style="width:auto;padding:5px 6px" title="Vide : les modifications s'appliquent aussi aux salons passés"></label><button class="btn primary" id="btnSaveLignes">Enregistrer les lignes</button></div>
       <div class="small muted" style="margin-top:10px">Données dans Firebase. Le Google Sheets n'en est plus qu'une copie (rapports PDF, archive) : <a id="sheetLink" target="_blank">ouvrir</a>.</div>
     </div>
 <div class="card"><h2>Charte des rapports PDF</h2>
@@ -1023,6 +1023,8 @@ function lineState(L){
   for(var i=0;i<L.nb;i++){var a=r.av[i],b=r.ap[i];if(a!==''&&a!=null)n++;if(b!==''&&b!=null)nb++}
   return {r:r,av:n,ap:nb};
 }
+/* lignes de comptage du salon affiché : réglages valables à sa date (changements de compteurs) */
+function lignesSaisie(){return (S.data&&S.data.lignes)||B.lignes}
 function consoOf(L,r){
   var t=0,ok=true,any=false;
   for(var i=0;i<L.nb;i++){var a=r.ap[i],b=r.av[i],ea=a===''||a==null,eb=b===''||b==null;if(!ea||!eb)any=true;if(ea!==eb)ok=false;if(!ea&&!eb)t+=(a-b)*L.coefs[i]}
@@ -1034,7 +1036,7 @@ function renderSaisie(){
   $('sDate').value=(S.phase==='av'?s.dateAvant:s.dateApres)||'';
   renderSum(s);
   var flt=$('sFilter').value, groups=[], idx={};
-  B.lignes.forEach(function(L){if(!(L.tgbt in idx)){idx[L.tgbt]=groups.length;groups.push({tgbt:L.tgbt,lines:[]})}groups[idx[L.tgbt]].lines.push(L)});
+  lignesSaisie().forEach(function(L){if(!(L.tgbt in idx)){idx[L.tgbt]=groups.length;groups.push({tgbt:L.tgbt,lines:[]})}groups[idx[L.tgbt]].lines.push(L)});
   var open=S.open||{};
   var html=groups.map(function(g){
     var done=0, shown=[];
@@ -1075,7 +1077,7 @@ $('sBody').addEventListener('keydown',function(e){
 });
 $('sBody').addEventListener('change',function(e){
   var inp=e.target; if(inp.tagName!=='INPUT')return;
-  var L=B.lignes.filter(function(x){return x.id===inp.dataset.l})[0], i=+inp.dataset.i;
+  var L=lignesSaisie().filter(function(x){return x.id===inp.dataset.l})[0], i=+inp.dataset.i;
   var v=parseNum(inp.value);
   if(isNaN(v)){toast('Valeur non reconnue : '+inp.value,1);inp.focus();return}
   inp.value=v===''?'':String(v).replace('.',',');
@@ -1122,7 +1124,7 @@ function updUndo(){var b=$('sUndo');if(!b)return;var n=(S.undo[S.salonId]||[]).l
   b.textContent='↶ Annuler la dernière saisie'+(n?' ('+n+')':'')}
 function undoLast(){
   var st=S.undo[S.salonId]||[],u=st.pop();updUndo();if(!u||!S.data)return;
-  var L=B.lignes.filter(function(x){return x.id===u.l})[0];if(!L)return;
+  var L=lignesSaisie().filter(function(x){return x.id===u.l})[0];if(!L)return;
   var r=u.r||{av:['','','','',''],ap:['','','','','']};
   S.data.releves[L.id]={av:r.av.slice(),ap:r.ap.slice()};
   S.data.proposes=S.data.proposes||{};if(u.p)S.data.proposes[L.id]=u.p.slice();else delete S.data.proposes[L.id];
@@ -1653,7 +1655,22 @@ function chEtat(){run('chEtatCharte').then(function(e){$('chEtat').innerHTML=(e.
   function totalDe(m) { var n = m.filter(Boolean).length; if (n === m.length) return 'OUI'; if (!n) return ''; return m.map(function (x, i) { return x ? i + 1 : 0; }).filter(Boolean).join(','); }
   function coefs(L) { var nb = +L.nb || 1, c = String(L.coefs === '' || L.coefs == null ? '1' : L.coefs).split(';'); while (c.length < nb) c.push('1'); return c.slice(0, nb); }
   function etat(t) { $('lgEtat').textContent = t || ''; }
-  function charger() { LG = (B.lignesBrutes || []).map(function (L) { return Object.assign({}, L); }); sale = false; etat(''); }
+  /* anciens réglages datés d'une ligne (changement de compteur) */
+  function jfr(d) { return d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4); }
+  function cfgTxt(h) {
+    if (String(h.actif || '').toUpperCase() === 'NON') return 'ligne inactive';
+    var c = String(h.coefs).split(';');
+    return (+h.nb || 1) + ' cpt · × ' + c.map(n2s).join(' ; ') + ' · total : ' + (h.total ? (h.total === 'OUI' ? 'oui' : 'cpt ' + h.total) : 'non') + (h.usage ? ' · ' + h.usage : '');
+  }
+  function histHtml(L, k) {
+    return (L.hist || []).map(function (h, j) {
+      return '<div class="small muted" style="white-space:normal;margin-top:3px">Jusqu\'au ' + jfr(h.jusqua) + ' : ' + e(cfgTxt(h)) +
+        ' <button class="btn sm" data-delh="' + k + '" data-j="' + j + '" title="Oublier ces anciens réglages" style="padding:0 6px">✕</button></div>';
+    }).join('');
+  }
+  function cfgCle(L) { var c = M.cfgLigne(Object.assign({}, L, { coefs: coefs(L).map(function (x) { return parseNum(x); }).join(';') })); return [c.nb, c.coefs, c.total, c.usage, c.actif].join('|'); }
+  function veille(d) { return M.isoFromDayNum(M.dayNum(d) - 1); }
+  function charger() { LG = (B.lignesBrutes || []).map(function (L) { return Object.assign({}, L, L.hist ? { hist: L.hist.map(function (h) { return Object.assign({}, h); }) } : {}); }); sale = false; etat(''); if ($('lgDepuis')) $('lgDepuis').value = ''; }
   function dessiner() {
     if (!LG) return;
     var f = $('lgFiltre').value.trim().toLowerCase(), inact = $('lgInactives').checked, idx = avecIndex();
@@ -1673,7 +1690,7 @@ function chEtat(){run('chEtatCharte').then(function(e){$('chEtat').innerHTML=(e.
       h += '<tr' + (actif ? '' : ' style="opacity:.55"') + '>' +
         '<td><input data-k="ordre" data-r="' + k + '" value="' + e(L.ordre) + '" inputmode="numeric" style="width:58px;padding:5px 6px"></td>' +
         '<td><input data-k="tgbt" data-r="' + k + '" value="' + e(L.tgbt) + '" style="min-width:150px;padding:5px 6px"></td>' +
-        '<td><input data-k="ligne" data-r="' + k + '" value="' + e(L.ligne) + '" style="min-width:120px;padding:5px 6px"><div class="small muted">' + e(L.id) + (idx[L.id] ? ' · index dans ' + idx[L.id] + ' salon(s)' : '') + '</div></td>' +
+        '<td><input data-k="ligne" data-r="' + k + '" value="' + e(L.ligne) + '" style="min-width:120px;padding:5px 6px"><div class="small muted">' + e(L.id) + (idx[L.id] ? ' · index dans ' + idx[L.id] + ' salon(s)' : '') + '</div>' + histHtml(L, k) + '</td>' +
         '<td><select data-k="nb" data-r="' + k + '" style="width:58px;padding:5px 4px">' + [1, 2, 3, 4, 5].map(function (v) { return '<option' + (+L.nb === v ? ' selected' : '') + '>' + v + '</option>'; }).join('') + '</select></td>' +
         '<td>' + cpt + '</td>' +
         '<td><select data-k="usage" data-r="' + k + '" style="width:78px;padding:5px 4px">' + USAGES.map(function (u) { return '<option value="' + u + '"' + (String(L.usage || '').toUpperCase() === u ? ' selected' : '') + '>' + (u || '—') + '</option>'; }).join('') + '</select></td>' +
@@ -1708,6 +1725,12 @@ function chEtat(){run('chEtatCharte').then(function(e){$('chEtat').innerHTML=(e.
     modifie();
   });
   $('lgTable').addEventListener('click', function (ev) {
+    var bh = ev.target.closest('[data-delh]');
+    if (bh) {
+      var Lh = LG[+bh.dataset.delh], hh = Lh.hist[+bh.dataset.j];
+      if (!confirm('Oublier les anciens réglages de « ' + Lh.tgbt + ' · ' + Lh.ligne + ' » (jusqu\'au ' + jfr(hh.jusqua) + ') ?\nLes salons concernés seront recalculés avec les réglages suivants.')) return;
+      Lh.hist.splice(+bh.dataset.j, 1); modifie(); dessiner(); return;
+    }
     var b = ev.target.closest('[data-del]'); if (!b) return;
     var L = LG[+b.dataset.del];
     if (!confirm('Supprimer la ligne « ' + L.tgbt + ' · ' + L.ligne + ' » ?')) return;
@@ -1728,9 +1751,26 @@ function chEtat(){run('chEtatCharte').then(function(e){$('chEtat').innerHTML=(e.
     var b = this; b.disabled = true;
     var bad = LG.filter(function (L) { return coefs(L).some(function (c) { return !isNum(parseNum(c)); }); })[0];
     if (bad) { toast('Coefficient non reconnu sur ' + bad.tgbt + ' · ' + bad.ligne, 1); b.disabled = false; return; }
+    // lignes dont le calcul change (nombre de compteurs, coefficients, total, usage, active)
+    var avant = {}; (B.lignesBrutes || []).forEach(function (L) { avant[L.id] = L; });
+    var idx = avecIndex(), depuis = $('lgDepuis').value;
+    var chg = LG.filter(function (L) { return avant[L.id] ? cfgCle(avant[L.id]) !== cfgCle(L) : !!depuis; });
+    var chgIdx = chg.filter(function (L) { return idx[L.id]; });
+    if (!depuis && chgIdx.length && !confirm('Aucune date « valables à partir du » : les nouveaux réglages de ' + chgIdx.length + ' ligne(s) qui ont déjà des index (' +
+      chgIdx.slice(0, 4).map(function (L) { return L.tgbt + ' · ' + L.ligne; }).join(', ') + (chgIdx.length > 4 ? '…' : '') +
+      ') s\'appliqueront aussi aux salons passés et changeront leurs consommations.\n\nPour un changement de compteur, annuler et indiquer la date du premier salon relevé avec le nouveau compteur.\n\nEnregistrer quand même ?')) { b.disabled = false; return; }
+    if (depuis) {
+      var j = veille(depuis);
+      chg.forEach(function (L) {
+        var h = (L.hist || []).filter(function (x) { return x.jusqua < j; }), deja = (L.hist || []).filter(function (x) { return x.jusqua >= j; })[0];
+        // anciens réglages gardés jusqu'à la veille ; une ligne nouvelle est inactive avant cette date
+        var old = deja ? Object.assign({}, deja) : (avant[L.id] ? M.cfgLigne(avant[L.id]) : Object.assign(M.cfgLigne(L), { actif: 'NON' }));
+        old.jusqua = j; h.push(old); L.hist = h;
+      });
+    }
     var list = LG.map(function (L) { return Object.assign({}, L, { coefs: coefs(L).map(function (c) { return parseNum(c); }).join(';') }); })
       .sort(function (a, c) { return (+a.ordre || 0) - (+c.ordre || 0); });
-    run('saveLignes', list).then(function (r) { B = r; sale = false; renderAll(); toast('Lignes de comptage enregistrées'); })
+    run('saveLignes', list).then(function (r) { B = r; sale = false; renderAll(); toast(depuis && chg.length ? 'Lignes enregistrées : ' + chg.length + ' modification(s) à partir du ' + jfr(depuis) : 'Lignes de comptage enregistrées'); })
       .catch(function (er) { toast(errMsg(er), 1); }).then(function () { b.disabled = false; });
   };
   var orig = window.renderReglages;

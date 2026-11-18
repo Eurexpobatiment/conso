@@ -92,8 +92,28 @@
       coefs: coefs.slice(0, nb), totMask: totMask, total: tot, usage: String(r[7] || '').trim().toUpperCase()
     };
   }
-  function readLignes(D) {
-    return (D.lignes || []).map(ligneRow).filter(function (r) { return String(r[8]).toUpperCase() !== 'NON' && String(r[0]) !== ''; })
+  /* ---------- réglages datés des lignes de comptage (changement de compteur) ----------
+   * Une ligne peut garder ses anciens réglages : hist = [{ jusqua:'AAAA-MM-JJ', nb, coefs, total, usage, actif }].
+   * Un salon qui commence au plus tard le jour « jusqua » est calculé avec ces anciens réglages ; les autres avec les réglages actuels. */
+  var LIGNE_CFG = ['nb', 'coefs', 'total', 'usage', 'actif'];
+  function histLigne_(L) {
+    return (Array.isArray(L && L.hist) ? L.hist : []).filter(function (h) { return h && estJour(h.jusqua); })
+      .slice().sort(function (a, b) { return a.jusqua < b.jusqua ? -1 : (a.jusqua > b.jusqua ? 1 : 0); });
+  }
+  /** Réglages de la ligne valables à une date (date vide = réglages actuels) */
+  function ligneAu(L, date) {
+    if (!estJour(date)) return L;
+    var h = histLigne_(L);
+    for (var i = 0; i < h.length; i++) {
+      if (date <= h[i].jusqua) { var o = Object.assign({}, L); LIGNE_CFG.forEach(function (k) { if (h[i][k] !== undefined) o[k] = h[i][k]; }); return o; }
+    }
+    return L;
+  }
+  function avecHist_(D) { return (D.lignes || []).some(function (L) { return histLigne_(L).length > 0; }); }
+  /** Date qui situe un salon par rapport aux changements de compteurs : son premier jour */
+  function dateSalon_(s) { return estJour(s.debut) ? s.debut : (estJour(s.dateAvant) ? s.dateAvant : (estJour(s.fin) ? s.fin : '')); }
+  function readLignes(D, date) {
+    return (D.lignes || []).map(function (L) { return ligneRow(ligneAu(L, date)); }).filter(function (r) { return String(r[8]).toUpperCase() !== 'NON' && String(r[0]) !== ''; })
       .map(parseLigne).sort(function (a, b) { return a.ordre - b.ordre; });
   }
   function readSalons(D) {
@@ -388,9 +408,12 @@
   function salonsCalcules_(D, P, halls, lignes, salons, releves, meteo, T) {
     var hallsSurf = {}; halls.forEach(function (h) { hallsSurf[h.hall] = h.surface; });
     var g = groupReleves_(releves);
+    var date = avecHist_(D), cache = {};
     return salons.map(function (s) {
       var o = {}; for (var k in s) o[k] = s[k];
-      o.ind = indicateurs_(D, s, agregats_(lignes, g, s.id), P, hallsSurf, meteo, T);
+      // lignes de comptage telles qu'elles étaient réglées à la date du salon (changements de compteurs)
+      var d = date ? dateSalon_(s) : '', lg = d ? (cache[d] = cache[d] || readLignes(D, d)) : lignes;
+      o.ind = indicateurs_(D, s, agregats_(lg, g, s.id), P, hallsSurf, meteo, T);
       return o;
     }).sort(function (a, b) { return (a.debut || '9999') < (b.debut || '9999') ? -1 : 1; });
   }
@@ -470,7 +493,11 @@
       sheetUrl: (D.srv && D.srv.sheetUrl) || '',
       logo: D.logo || '',
       site: ((D.srv && D.srv.site) || []).map(function (r) { return { d: r.d, e: r.e == null ? null : r.e, g: r.g == null ? null : r.g }; }),
-      lignesBrutes: (D.lignes || []).map(function (L) { var o = {}; LIGNE_KEYS.forEach(function (k) { o[k] = L[k] === undefined || L[k] === null ? '' : L[k]; }); return o; })
+      lignesBrutes: (D.lignes || []).map(function (L) {
+        var o = {}; LIGNE_KEYS.forEach(function (k) { o[k] = L[k] === undefined || L[k] === null ? '' : L[k]; });
+        var h = histLigne_(L); if (h.length) o.hist = h.map(function (x) { return Object.assign({}, x); });
+        return o;
+      })
         .sort(function (a, b) { return n0_(a.ordre) - n0_(b.ordre); })
     };
   }
@@ -539,7 +566,9 @@
       }
       if (!aucun) proposes[l] = masque;
     });
-    return { salonId: salonId, releves: cur, precedents: prev, sources: sources, proposes: proposes, fictifs: fictifs };
+    // lignes telles qu'elles étaient réglées à la date du salon (nombre de compteurs, coefficients)
+    var lignes = readLignes(D, avecHist_(D) ? dateSalon_(me) : '').map(function (L) { return { id: L.id, tgbt: L.tgbt, ligne: L.ligne, nb: L.nb, coefs: L.coefs, usage: L.usage, total: L.total }; });
+    return { salonId: salonId, releves: cur, precedents: prev, sources: sources, proposes: proposes, fictifs: fictifs, lignes: lignes };
   }
 
   /* ---------- préparation des enregistrements ---------- */
@@ -563,22 +592,33 @@
     return o;
   }
   /** Ligne de comptage nettoyée pour l'enregistrement */
-  function nettoyerLigne(L) {
+  function cfgLigne(L) {
     var nb = Math.max(1, Math.min(5, parseInt(L.nb, 10) || 1));
     var coefs = String(L.coefs === '' || L.coefs == null ? '1' : L.coefs).split(';').map(function (c) { var n = num_(c); return n === '' ? 1 : n; });
     while (coefs.length < nb) coefs.push(1);
     var u = String(L.usage || '').trim().toUpperCase();
     if (['', 'CVC', 'FM', 'ECL', 'PV'].indexOf(u) < 0) u = '';
     return {
-      id: String(L.id), ordre: n0_(L.ordre), tgbt: String(L.tgbt || '').trim(), ligne: String(L.ligne || '').trim(), nb: nb,
-      coefs: coefs.slice(0, nb).join(';'), total: String(L.total || '').trim().toUpperCase(), usage: u,
+      nb: nb, coefs: coefs.slice(0, nb).join(';'), total: String(L.total || '').trim().toUpperCase(), usage: u,
       actif: String(L.actif || '').toUpperCase() === 'NON' ? 'NON' : 'OUI'
     };
+  }
+  function nettoyerLigne(L) {
+    var c = cfgLigne(L);
+    var o = {
+      id: String(L.id), ordre: n0_(L.ordre), tgbt: String(L.tgbt || '').trim(), ligne: String(L.ligne || '').trim(), nb: c.nb,
+      coefs: c.coefs, total: c.total, usage: c.usage, actif: c.actif
+    };
+    // anciens réglages datés (un seul par date)
+    var vus = {}, h = histLigne_(L).filter(function (x) { if (vus[x.jusqua]) return false; vus[x.jusqua] = 1; return true; })
+      .map(function (x) { var k = cfgLigne(x); k.jusqua = x.jusqua; return k; });
+    if (h.length) o.hist = h;
+    return o;
   }
 
   root.M = {
     getBootstrap: getBootstrap, getSalonCalcule: getSalonCalcule, getReleves: getReleves,
-    preparerSalon: preparerSalon, nettoyerLigne: nettoyerLigne, cinq: cinq, num: num_, iso: iso_, maintenant: maintenant,
+    preparerSalon: preparerSalon, nettoyerLigne: nettoyerLigne, cfgLigne: cfgLigne, ligneAu: ligneAu, cinq: cinq, num: num_, iso: iso_, maintenant: maintenant,
     defaultCorr: defaultCorr_, SALON_KEYS: SALON_KEYS, mots: mots,
     /* pour rapports.js : tous les salons calculés (toutes années) et les données de base */
     tousCalcules: function (D) {
