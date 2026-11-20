@@ -1057,12 +1057,15 @@ function lineHtml(L){
     cp+='<div class="cpt"><label><span>'+(L.nb>1?'Cpt '+(i+1):'Index')+'</span>'+(L.coefs[i]!==1?'<span>× '+String(L.coefs[i]).replace('.',',')+'</span>':'')+'</label>'+
       '<input'+(ph==='av'&&prop[i]?' class="prop" title="Repris automatiquement du salon précédent"':'')+' inputmode="decimal" enterkeyhint="next" data-l="'+L.id+'" data-i="'+i+'" value="'+(v===''||v==null?'':String(v).replace('.',','))+'" placeholder="'+(hint===''||hint==null?'':String(hint).replace('.',','))+'"></div>';
   }
-  var c=consoOf(L,r);
+  var c=consoOf(L,r), inch='';
+  /* phase Après : compteur qui n'a pas bougé → bouton pour reprendre l'index avant tel quel */
+  if(ph==='ap'){var reste=0;for(var j=0;j<L.nb;j++){var xa=r.av[j],xb=r.ap[j];if(xa!==''&&xa!=null&&(xb===''||xb==null))reste++}
+    if(reste)inch='<button type="button" class="btn sm inch" data-inch="'+L.id+'" style="margin-left:auto" title="Le compteur n’a pas bougé : l’index après reprend l’index avant">= Inchangé</button>'}
   var foot='<span class="st" id="st-'+L.id+'"></span>'+(c.ok?'Conso : <span class="'+(c.t<0?'neg':'')+'">'+fmt(c.t,3)+' MWh</span>':(st.av||st.ap?'<span class="muted">'+(st.av&&!st.ap?'Index après à saisir':(!st.av&&st.ap?'Index avant à saisir':'Saisie partielle'))+'</span>':''));
   if(ph==='av'&&prop.some(function(x){return x}))foot+='<span class="muted">· italique = repris du salon précédent, à vérifier</span>';
   if(ph==='av'&&prev.some(function(x){return x!==''&&x!=null}))foot+='<span class="muted">· gris = dernier index connu</span>';
   if(ph==='ap')foot+='<span class="muted">· gris = index avant</span>';
-  return '<div class="ln" id="ln-'+L.id+'"><div class="t"><span class="lab">'+esc(L.ligne)+'</span>'+badges+'</div><div class="cpts">'+cp+'</div><div class="foot" id="ft-'+L.id+'">'+foot+'</div></div>';
+  return '<div class="ln" id="ln-'+L.id+'"><div class="t"><span class="lab">'+esc(L.ligne)+'</span>'+badges+inch+'</div><div class="cpts">'+cp+'</div><div class="foot" id="ft-'+L.id+'">'+foot+'</div></div>';
 }
 function renderSum(s){
   var o=s.ind;
@@ -1090,6 +1093,21 @@ $('sBody').addEventListener('change',function(e){
   S.data.releves[L.id]=cur;
   saveLine(L,cur);
   autoDateReleve(v);
+});
+/* Bouton « = Inchangé » (phase Après) : les index après vides reprennent l'index avant */
+$('sBody').addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('button[data-inch]'); if(!b||S.phase!=='ap')return;
+  var L=lignesSaisie().filter(function(x){return x.id===b.dataset.inch})[0]; if(!L)return;
+  var cur=S.data.releves[L.id]; if(!cur)return;
+  cur={av:cur.av.slice(),ap:cur.ap.slice()}; while(cur.av.length<5)cur.av.push('');while(cur.ap.length<5)cur.ap.push('');
+  var n=0;for(var i=0;i<L.nb;i++){var a=cur.av[i];if(a!==''&&a!=null&&(cur.ap[i]===''||cur.ap[i]==null)){cur.ap[i]=a;n++}}
+  if(!n)return;
+  pushUndo(L,0);
+  S.data.releves[L.id]=cur;
+  var ln=$('ln-'+L.id);if(ln){var tmp=document.createElement('div');tmp.innerHTML=lineHtml(L);ln.replaceWith(tmp.firstChild)}
+  saveLine(L,cur);
+  autoDateReleve(cur.ap[0]!==''?cur.ap[0]:1);
+  toast('Index inchangé : '+L.ligne);
 });
 /* Date du relevé : date du jour par défaut, posée à la première saisie d'index de la phase */
 function autoDateReleve(v){
